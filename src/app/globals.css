@@ -32,16 +32,40 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family:
+    var(--font-geist-sans),
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
   background-image:
     linear-gradient(oklch(0.18 0.012 60 / 0.025) 1px, transparent 1px),
     linear-gradient(90deg, oklch(0.18 0.012 60 / 0.018) 1px, transparent 1px),
-    radial-gradient(ellipse 64% 42% at 76% -6%, oklch(0.91 0.075 83 / 0.68), transparent 68%),
-    radial-gradient(ellipse 45% 34% at 15% 104%, oklch(0.93 0.045 79 / 0.55), transparent 72%),
-    linear-gradient(180deg, var(--bone) 0%, var(--bone-soft) 54%, var(--bone) 100%);
-  background-size: 48px 48px, 48px 48px, 100% 100%, 100% 100%, 100% 100%;
+    radial-gradient(
+      ellipse 64% 42% at 76% -6%,
+      oklch(0.91 0.075 83 / 0.68),
+      transparent 68%
+    ),
+    radial-gradient(
+      ellipse 45% 34% at 15% 104%,
+      oklch(0.93 0.045 79 / 0.55),
+      transparent 72%
+    ),
+    linear-gradient(
+      180deg,
+      var(--bone) 0%,
+      var(--bone-soft) 54%,
+      var(--bone) 100%
+    );
+  background-size:
+    48px 48px,
+    48px 48px,
+    100% 100%,
+    100% 100%,
+    100% 100%;
   background-attachment: fixed;
 }
 
@@ -129,8 +153,17 @@ textarea {
   border: 1px solid oklch(1 0 0 / 0.08);
   border-radius: 10px;
   background:
-    radial-gradient(circle at 14% -20%, oklch(0.72 0.16 74 / 0.28), transparent 34%),
-    linear-gradient(120deg, var(--night) 0%, var(--night-2) 58%, oklch(0.15 0.014 65) 100%);
+    radial-gradient(
+      circle at 14% -20%,
+      oklch(0.72 0.16 74 / 0.28),
+      transparent 34%
+    ),
+    linear-gradient(
+      120deg,
+      var(--night) 0%,
+      var(--night-2) 58%,
+      oklch(0.15 0.014 65) 100%
+    );
   box-shadow: 0 28px 60px -42px oklch(0.1 0.01 65 / 0.72);
 }
 
@@ -161,7 +194,12 @@ textarea {
   border-block: 1px solid var(--line);
   background:
     linear-gradient(110deg, oklch(1 0 0 / 0.52), oklch(1 0 0 / 0.17)),
-    linear-gradient(90deg, transparent, oklch(0.91 0.065 84 / 0.15), transparent);
+    linear-gradient(
+      90deg,
+      transparent,
+      oklch(0.91 0.065 84 / 0.15),
+      transparent
+    );
 }
 
 @media (min-width: 640px) {
@@ -235,7 +273,12 @@ textarea {
   position: relative;
   background:
     radial-gradient(circle at 68% 22%, oklch(0.98 0.04 85), transparent 23%),
-    linear-gradient(145deg, var(--gold-deep), var(--accent-indigo) 52%, var(--gold-light));
+    linear-gradient(
+      145deg,
+      var(--gold-deep),
+      var(--accent-indigo) 52%,
+      var(--gold-light)
+    );
   color: oklch(0.13 0.012 65);
   box-shadow: 0 0 38px -12px oklch(0.76 0.145 76 / 0.82);
 }
@@ -244,7 +287,11 @@ textarea {
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(circle at 18% -40%, oklch(0.73 0.15 75 / 0.32), transparent 54%),
+    radial-gradient(
+      circle at 18% -40%,
+      oklch(0.73 0.15 75 / 0.32),
+      transparent 54%
+    ),
     linear-gradient(120deg, var(--night), var(--night-2));
   color: oklch(0.97 0.006 82);
   border: 1px solid oklch(0.76 0.145 76 / 0.38);
@@ -332,7 +379,11 @@ textarea {
   overflow-y: auto;
   color: oklch(0.92 0.006 82);
   background:
-    radial-gradient(circle at 25% 4%, oklch(0.63 0.14 70 / 0.2), transparent 28%),
+    radial-gradient(
+      circle at 25% 4%,
+      oklch(0.63 0.14 70 / 0.2),
+      transparent 28%
+    ),
     linear-gradient(180deg, oklch(0.17 0.016 68), oklch(0.115 0.01 65) 74%);
   border-right: 1px solid oklch(0.75 0.12 75 / 0.16);
   box-shadow: 22px 0 70px -54px oklch(0.08 0.01 65 / 0.8);
@@ -385,7 +436,11 @@ textarea {
   color: oklch(0.72 0.008 78);
   font-size: 0.78rem;
   font-weight: 560;
-  transition: color 180ms ease, background 180ms ease, border-color 180ms ease, transform 180ms ease;
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
 }
 
 .sidebar-link:hover {
@@ -476,7 +531,11 @@ textarea {
   top: 18%;
   width: 1px;
   height: 56%;
-  background: linear-gradient(transparent, oklch(0.7 0.14 75 / 0.52), transparent);
+  background: linear-gradient(
+    transparent,
+    oklch(0.7 0.14 75 / 0.52),
+    transparent
+  );
   box-shadow: 0 0 42px oklch(0.7 0.14 75 / 0.3);
 }
 
@@ -485,7 +544,12 @@ textarea {
   top: 43%;
   width: 28%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, oklch(0.7 0.14 75 / 0.48), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    oklch(0.7 0.14 75 / 0.48),
+    transparent
+  );
   box-shadow: 0 0 42px oklch(0.7 0.14 75 / 0.28);
 }
 
@@ -499,7 +563,11 @@ textarea {
   z-index: 40;
   color: white;
   background:
-    radial-gradient(circle at 18% -50%, oklch(0.68 0.14 72 / 0.28), transparent 45%),
+    radial-gradient(
+      circle at 18% -50%,
+      oklch(0.68 0.14 72 / 0.28),
+      transparent 45%
+    ),
     oklch(0.14 0.012 68 / 0.96);
   border-bottom: 1px solid oklch(0.75 0.12 75 / 0.16);
   backdrop-filter: blur(18px);
@@ -529,7 +597,11 @@ textarea {
   border: 1px solid oklch(1 0 0 / 0.07);
   border-radius: 9px;
   background:
-    radial-gradient(circle at 12% -80%, oklch(0.68 0.14 72 / 0.22), transparent 42%),
+    radial-gradient(
+      circle at 12% -80%,
+      oklch(0.68 0.14 72 / 0.22),
+      transparent 42%
+    ),
     var(--night);
   box-shadow: 0 18px 44px -32px oklch(0.08 0.01 65 / 0.75);
 }
@@ -537,9 +609,22 @@ textarea {
 .login-shell {
   color: white;
   background:
-    radial-gradient(circle at 24% 38%, oklch(0.63 0.14 70 / 0.16), transparent 17%),
-    radial-gradient(circle at 24% 38%, oklch(0.9 0.09 83 / 0.06), transparent 36%),
-    linear-gradient(115deg, oklch(0.13 0.012 67), oklch(0.175 0.016 68) 52%, oklch(0.11 0.009 65));
+    radial-gradient(
+      circle at 24% 38%,
+      oklch(0.63 0.14 70 / 0.16),
+      transparent 17%
+    ),
+    radial-gradient(
+      circle at 24% 38%,
+      oklch(0.9 0.09 83 / 0.06),
+      transparent 36%
+    ),
+    linear-gradient(
+      115deg,
+      oklch(0.13 0.012 67),
+      oklch(0.175 0.016 68) 52%,
+      oklch(0.11 0.009 65)
+    );
 }
 
 .login-shell::before {
@@ -562,7 +647,11 @@ textarea {
   bottom: 11%;
   width: 1px;
   pointer-events: none;
-  background: linear-gradient(transparent, oklch(0.78 0.14 77 / 0.42), transparent);
+  background: linear-gradient(
+    transparent,
+    oklch(0.78 0.14 77 / 0.42),
+    transparent
+  );
   box-shadow: 0 0 34px oklch(0.78 0.14 77 / 0.28);
 }
 
@@ -591,8 +680,11 @@ textarea {
 .login-panel {
   position: relative;
   color: var(--ink);
-  background:
-    linear-gradient(145deg, oklch(1 0 0 / 0.95), oklch(0.965 0.012 82 / 0.91));
+  background: linear-gradient(
+    145deg,
+    oklch(1 0 0 / 0.95),
+    oklch(0.965 0.012 82 / 0.91)
+  );
   border: 1px solid oklch(1 0 0 / 0.42);
   border-radius: 12px;
   box-shadow:
@@ -609,19 +701,43 @@ textarea {
   border-radius: 8px;
 }
 
-.metric-strip :where(.text-stone-50, .text-stone-100, .text-slate-50, .text-slate-100, .text-stone-200, .text-stone-300, .text-slate-200, .text-slate-300) {
+.metric-strip
+  :where(
+    .text-stone-50,
+    .text-stone-100,
+    .text-slate-50,
+    .text-slate-100,
+    .text-stone-200,
+    .text-stone-300,
+    .text-slate-200,
+    .text-slate-300
+  ) {
   color: oklch(0.97 0.006 82) !important;
 }
 
-.metric-strip :where(.text-stone-400, .text-stone-500, .text-slate-400, .text-slate-500) {
+.metric-strip
+  :where(.text-stone-400, .text-stone-500, .text-slate-400, .text-slate-500) {
   color: oklch(0.7 0.008 78) !important;
 }
 
-.metric-strip :where(.text-amber-200, .text-amber-300, .text-amber-400, .text-amber-700, .text-amber-800) {
+.metric-strip
+  :where(
+    .text-amber-200,
+    .text-amber-300,
+    .text-amber-400,
+    .text-amber-700,
+    .text-amber-800
+  ) {
   color: oklch(0.83 0.135 80) !important;
 }
 
-.metric-strip :where(.text-emerald-200, .text-emerald-300, .text-emerald-400, .text-emerald-700) {
+.metric-strip
+  :where(
+    .text-emerald-200,
+    .text-emerald-300,
+    .text-emerald-400,
+    .text-emerald-700
+  ) {
   color: oklch(0.76 0.15 155) !important;
 }
 
@@ -643,7 +759,13 @@ textarea {
   color: var(--ink-3) !important;
 }
 
-:where(.text-stone-500, .text-stone-600, .text-slate-500, .text-slate-600, .text-slate-700) {
+:where(
+  .text-stone-500,
+  .text-stone-600,
+  .text-slate-500,
+  .text-slate-600,
+  .text-slate-700
+) {
   color: oklch(0.5 0.008 70) !important;
 }
 
@@ -655,7 +777,13 @@ textarea {
   color: oklch(0.48 0.13 158) !important;
 }
 
-:where(.text-red-200, .text-red-300, .text-red-400, .text-rose-300, .text-rose-400) {
+:where(
+  .text-red-200,
+  .text-red-300,
+  .text-red-400,
+  .text-rose-300,
+  .text-rose-400
+) {
   color: oklch(0.5 0.18 28) !important;
 }
 
@@ -673,7 +801,11 @@ textarea {
 table thead {
   background-color: var(--night) !important;
   background-image:
-    radial-gradient(circle at 8% -60%, oklch(0.68 0.14 72 / 0.24), transparent 38%),
+    radial-gradient(
+      circle at 8% -60%,
+      oklch(0.68 0.14 72 / 0.24),
+      transparent 38%
+    ),
     linear-gradient(var(--night), var(--night)) !important;
 }
 
@@ -742,7 +874,11 @@ select.form-input {
 body {
   background-color: #f4f6f8;
   background-image:
-    radial-gradient(circle at 78% -12%, rgba(245, 181, 83, 0.09), transparent 30rem),
+    radial-gradient(
+      circle at 78% -12%,
+      rgba(245, 181, 83, 0.09),
+      transparent 30rem
+    ),
     linear-gradient(180deg, #f7f8fa 0%, #f1f3f6 100%);
   background-attachment: fixed;
 }
@@ -881,7 +1017,11 @@ body {
 .brand-secondary {
   min-height: 2.6rem;
   border-radius: 8px;
-  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
 }
 
 .brand-button {
@@ -966,7 +1106,10 @@ body {
   box-shadow:
     0 1px 2px rgba(15, 23, 42, 0.025),
     0 12px 28px -24px rgba(15, 23, 42, 0.34);
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .metric-item:hover {
@@ -978,7 +1121,11 @@ body {
 
 .metric-item-featured {
   background:
-    radial-gradient(circle at 100% 0, rgba(245, 181, 83, 0.16), transparent 9rem),
+    radial-gradient(
+      circle at 100% 0,
+      rgba(245, 181, 83, 0.16),
+      transparent 9rem
+    ),
     #fff;
   border-color: rgba(196, 132, 35, 0.22);
 }
@@ -1000,11 +1147,22 @@ body {
   height: 1.1rem;
 }
 
-.metric-strip :where(.text-stone-50, .text-stone-100, .text-slate-50, .text-slate-100, .text-stone-200, .text-stone-300, .text-slate-200, .text-slate-300) {
+.metric-strip
+  :where(
+    .text-stone-50,
+    .text-stone-100,
+    .text-slate-50,
+    .text-slate-100,
+    .text-stone-200,
+    .text-stone-300,
+    .text-slate-200,
+    .text-slate-300
+  ) {
   color: #172033 !important;
 }
 
-.metric-strip :where(.text-stone-400, .text-stone-500, .text-slate-400, .text-slate-500) {
+.metric-strip
+  :where(.text-stone-400, .text-stone-500, .text-slate-400, .text-slate-500) {
   color: #6b7280 !important;
 }
 
@@ -1091,7 +1249,9 @@ table tbody tr:hover {
   transform: none;
 }
 
-.presentation-shell .metric-strip :where(.text-stone-50, .text-stone-100, .text-stone-200, .text-stone-300) {
+.presentation-shell
+  .metric-strip
+  :where(.text-stone-50, .text-stone-100, .text-stone-200, .text-stone-300) {
   color: #f7f4ec !important;
 }
 
@@ -1164,7 +1324,14 @@ table tbody tr:hover {
   color: #fff !important;
 }
 
-.side-rail :where(.text-white, .text-stone-50, .text-stone-100, .text-slate-50, .text-slate-100) {
+.side-rail
+  :where(
+    .text-white,
+    .text-stone-50,
+    .text-stone-100,
+    .text-slate-50,
+    .text-slate-100
+  ) {
   color: #f8fafc !important;
 }
 
@@ -1180,8 +1347,23 @@ table tbody tr:hover {
   color: #7d899c !important;
 }
 
-.mobile-topbar :where(.text-white, .text-stone-50, .text-stone-100, .text-stone-300, .text-slate-100, .text-slate-300),
-.commercial-nav :where(.text-white, .text-stone-50, .text-stone-100, .text-stone-200, .text-stone-300) {
+.mobile-topbar
+  :where(
+    .text-white,
+    .text-stone-50,
+    .text-stone-100,
+    .text-stone-300,
+    .text-slate-100,
+    .text-slate-300
+  ),
+.commercial-nav
+  :where(
+    .text-white,
+    .text-stone-50,
+    .text-stone-100,
+    .text-stone-200,
+    .text-stone-300
+  ) {
   color: #f1f5f9 !important;
 }
 
@@ -1269,7 +1451,7 @@ label[aria-disabled="true"] {
 
 @media print {
   @page {
-    size: A4 landscape;
+    size: A4 portrait;
     margin: 10mm;
   }
 
@@ -1298,5 +1480,52 @@ label[aria-disabled="true"] {
 
   .presentation-shell footer {
     break-before: auto;
+  }
+
+  body:has(.print-document) {
+    background: white !important;
+  }
+
+  body:has(.print-document) .side-rail,
+  body:has(.print-document) .mobile-topbar,
+  body:has(.print-document) .company-footer,
+  body:has(.print-document) .print-hidden {
+    display: none !important;
+  }
+
+  body:has(.print-document) .workspace,
+  body:has(.print-document) .workspace-canvas,
+  body:has(.print-document) main {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  body:has(.print-document) .print-document {
+    position: static !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body:has(.print-document) .quotation-sheet {
+    min-height: 277mm;
+    border: 0 !important;
+  }
+
+  body:has(.print-document) .quotation-table thead {
+    display: table-header-group;
+  }
+
+  body:has(.print-document) .quotation-table tr,
+  body:has(.print-document) .quotation-keep {
+    break-inside: avoid;
   }
 }
