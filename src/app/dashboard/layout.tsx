@@ -4,18 +4,17 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
+  BookOpen,
+  Building2,
+  CalendarClock,
   Database,
-  FileText,
-  GitCompareArrows,
+  FilePlus2,
   LayoutDashboard,
   LogOut,
   Menu,
-  MonitorPlay,
-  PlusCircle,
-  Radar,
-  UploadCloud,
-  FileSpreadsheet,
-  ClipboardCheck,
+  PackageSearch,
+  ReceiptText,
+  Settings,
   Users,
   X,
 } from 'lucide-react';
@@ -77,35 +76,28 @@ export default function DashboardLayout({
   const isAdmin = role === 'admin';
   const menuGroups = [
     {
-      label: 'Visão',
+      label: 'Comercial',
       items: [
-        { href: '/dashboard', icon: <LayoutDashboard size={17} />, label: 'Painel Geral' },
-        { href: '/dashboard/apresentacao', icon: <MonitorPlay size={17} />, label: 'Apresentação' },
-        { href: '/dashboard/licitacoes', icon: <FileText size={17} />, label: 'Licitações' },
-        { href: '/dashboard/licitacoes/compare', icon: <GitCompareArrows size={17} />, label: 'Comparativo 25 × 26' },
-        { href: '/dashboard/saldos/reconciliacao', icon: <ClipboardCheck size={17} />, label: 'Reconciliação' },
+        { href: '/dashboard', icon: <LayoutDashboard size={17} />, label: 'Visão geral' },
+        { href: '/dashboard/clientes', icon: <Building2 size={17} />, label: 'Clientes privados' },
+        { href: '/dashboard/agenda', icon: <CalendarClock size={17} />, label: 'Agenda e retornos' },
       ],
     },
     {
-      label: 'Comercial',
+      label: 'Cotações',
       items: [
-        { href: '/dashboard/comercial/tendencias', icon: <Radar size={17} />, label: 'CRM Comercial' },
+        { href: '/dashboard/cotacoes/nova', icon: <FilePlus2 size={17} />, label: 'Nova cotação' },
+        { href: '/dashboard/cotacoes', icon: <ReceiptText size={17} />, label: 'Histórico de cotações' },
+        { href: '/dashboard/catalogo', icon: <PackageSearch size={17} />, label: 'Tabela de produtos' },
       ],
     },
     ...(isAdmin ? [
       {
-        label: 'Operação',
-        items: [
-          { href: '/dashboard/empenhos/novo', icon: <PlusCircle size={17} />, label: 'Lançar Empenho' },
-          { href: '/dashboard/import', icon: <ClipboardCheck size={17} />, label: 'Central de importações' },
-          { href: '/dashboard/import/empenhos-lote', icon: <FileSpreadsheet size={17} />, label: 'Empenhos em lote' },
-          { href: '/dashboard/import/halex-powerbi', icon: <UploadCloud size={17} />, label: 'Importar Halex' },
-        ],
-      },
-      {
-        label: 'Sistema',
+        label: 'Administração',
         items: [
           { href: '/dashboard/admin/accounts', icon: <Users size={17} />, label: 'Contas' },
+          { href: '/dashboard/configuracoes', icon: <Settings size={17} />, label: 'Papel timbrado' },
+          { href: '/dashboard/importar', icon: <BookOpen size={17} />, label: 'Importar dados' },
           { href: '/dashboard/backup/data', icon: <Database size={17} />, label: 'Backup' },
         ],
       },
@@ -126,12 +118,10 @@ export default function DashboardLayout({
                 label={item.label}
                 active={
                   pathname === item.href ||
-                  (item.href === '/dashboard/comercial/tendencias' && pathname.startsWith('/dashboard/comercial')) ||
                   (
                     item.href !== '/dashboard' &&
-                    item.href !== '/dashboard/import' &&
                     pathname.startsWith(`${item.href}/`) &&
-                    !(item.href === '/dashboard/licitacoes' && pathname.startsWith('/dashboard/licitacoes/compare'))
+                    !(item.href === '/dashboard/cotacoes' && pathname.startsWith('/dashboard/cotacoes/nova'))
                   )
                 }
                 onClick={() => setMobileMenuOpen(false)}
@@ -206,10 +196,10 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
         LL
       </div>
       <div>
-        <p className="text-base font-semibold leading-none text-white">Licita Lumina</p>
+        <p className="text-base font-semibold leading-none text-white">Halex Istar CRM</p>
         {!compact && (
           <span className="mt-1 block text-[9px] font-bold uppercase tracking-[0.2em] text-amber-400">
-            Inteligência em licitações
+            Clientes e cotações
           </span>
         )}
       </div>

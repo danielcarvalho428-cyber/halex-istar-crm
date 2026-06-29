@@ -1,7 +1,7 @@
 'use client';
 
 import React, { FormEvent, useState } from 'react';
-import { ArrowRight, GitCompareArrows, LockKeyhole, Radar, ShieldCheck, WalletCards } from 'lucide-react';
+import { ArrowRight, CalendarClock, FileText, LockKeyhole, ShieldCheck, Users } from 'lucide-react';
 import CompanyFooter from '../../components/CompanyFooter';
 
 export default function LoginPage() {
@@ -42,12 +42,12 @@ export default function LoginPage() {
       <header className="relative z-10 mx-auto flex w-full max-w-[1440px] items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="brand-mark flex h-10 w-10 items-center justify-center rounded-lg text-sm font-black">
-            LL
+            HI
           </div>
           <div>
-            <p className="text-sm font-semibold text-white">Licita Lumina</p>
+            <p className="text-sm font-semibold text-white">Halex Istar CRM</p>
             <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.2em] text-amber-400">
-              Inteligência em licitações
+              Clientes e cotações
             </p>
           </div>
         </div>
@@ -62,18 +62,18 @@ export default function LoginPage() {
           <div className="login-signal mb-6 lg:mb-10" aria-hidden="true">
             <span />
           </div>
-          <p className="lumina-kicker mb-3 lg:mb-5">Inteligência comercial · Licitações</p>
+          <p className="lumina-kicker mb-3 lg:mb-5">Inteligência comercial · Mercado privado</p>
           <h1 className="max-w-3xl text-4xl font-semibold leading-[0.96] tracking-[-0.05em] text-white sm:text-6xl xl:text-8xl">
-            Clareza para recuperar o que importa.
+            O momento certo para cada cliente.
           </h1>
           <p className="mt-4 max-w-xl text-sm leading-6 text-stone-400 sm:mt-6 sm:text-base sm:leading-7">
-            Pregões, saldos, histórico de vendas e próxima ação comercial reunidos em uma única visão.
+            Histórico de compras, ciclo de recompra, relacionamento e cotações profissionais reunidos em uma única operação.
           </p>
           <div className="mt-7 hidden border-y border-white/10 sm:grid sm:grid-cols-3 lg:mt-10">
             {[
-              [GitCompareArrows, 'Comparativo', '2025 × 2026'],
-              [Radar, 'Inteligência', 'Tendência de compra'],
-              [WalletCards, 'Operação', 'Saldo e empenhos'],
+              [Users, 'Carteira', 'Clientes privados'],
+              [CalendarClock, 'Inteligência', 'Ciclo de compra'],
+              [FileText, 'Operação', 'Cotações automáticas'],
             ].map(([Icon, label, detail], index) => (
               <div key={String(label)} className={`py-4 sm:px-5 ${index ? 'border-t border-white/10 sm:border-l sm:border-t-0' : ''}`}>
                 <Icon size={17} className="text-amber-400" />

@@ -4,18 +4,18 @@ import { AUTH_COOKIE_NAME, getSessionFromToken } from './lib/auth';
 
 function isAdminOnlyPath(pathname: string) {
   return (
-    pathname === '/dashboard/licitacoes/nova' ||
-    pathname === '/dashboard/empenhos/novo' ||
-    pathname === '/dashboard/import' ||
-    pathname === '/dashboard/import/empenhos-lote' ||
+    pathname === '/dashboard/configuracoes' ||
+    pathname === '/dashboard/importar' ||
     pathname === '/dashboard/backup/data' ||
-    pathname === '/dashboard/backup/export-editais' ||
-    pathname.includes('/editar') ||
-    pathname.includes('/upload-')
+    pathname.startsWith('/dashboard/admin/')
   );
 }
 
 export async function proxy(request: NextRequest) {
+  const localPreview = process.env.NODE_ENV === 'development'
+    && !process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (localPreview) return NextResponse.next();
+
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   const session = await getSessionFromToken(token);
 

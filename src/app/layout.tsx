@@ -14,10 +14,10 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Licita Lumina",
-    template: "%s | Licita Lumina",
+    default: "Halex Istar CRM",
+    template: "%s | Halex Istar CRM",
   },
-  description: "Inteligência e gestão comercial para licitações, empenhos e saldos",
+  description: "CRM de clientes privados e geração inteligente de cotações",
 };
 
 export default function RootLayout({

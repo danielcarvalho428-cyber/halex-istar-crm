@@ -1,0 +1,5 @@
+import Link from 'next/link';
+import { FilePlus2, ReceiptText } from 'lucide-react';
+import { money, previewClients } from '@/lib/crm-preview';
+
+export default function QuotationsPage(){return <div className="space-y-6"><header className="page-hero flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="lumina-kicker">Propostas</p><h1 className="mt-2">Cotações</h1><p className="mt-2 text-sm text-stone-500">Acompanhe rascunhos, envios, aprovações e conversões.</p></div><Link href="/dashboard/cotacoes/nova" className="brand-button inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-bold"><FilePlus2 size={16}/>Nova cotação</Link></header><section className="glass-card p-10 text-center"><ReceiptText className="mx-auto text-amber-700" size={32}/><h2 className="mt-3 font-semibold">Histórico preparado para o novo Supabase</h2><p className="mx-auto mt-2 max-w-lg text-sm text-stone-500">As cotações salvas aparecerão aqui com status, valor, validade e cliente. A prévia atual da carteira representa {money(previewClients.reduce((s,c)=>s+c.total12m,0))} em compras de 12 meses.</p></section></div>}
