@@ -9,11 +9,14 @@ import {
   previewClients,
   previewProducts,
 } from "@/lib/crm-preview";
+import { useDesktopClients, useDesktopProducts } from "@/lib/use-desktop-data";
 
 type QuoteLine = { productId: string; quantity: number; unitPrice: number };
 
 function Builder() {
   const params = useSearchParams();
+  const clients = useDesktopClients();
+  const products = useDesktopProducts();
   const [clientId, setClientId] = useState(
     params.get("cliente") || previewClients[0].id,
   );
@@ -35,8 +38,14 @@ function Builder() {
   const [notes, setNotes] = useState(
     "Preços expressos em reais. Produtos sujeitos à disponibilidade no momento da confirmação do pedido.",
   );
-  const client = previewClients.find((item) => item.id === clientId)!;
-  const filtered = previewProducts.filter((item) =>
+  const [issued] = useState(() => new Date());
+  const [quoteNumber] = useState(() => {
+    const now = new Date();
+    return `HI-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+  });
+  const [notice, setNotice] = useState("");
+  const client = clients.find((item) => item.id === clientId) || clients[0];
+  const filtered = products.filter((item) =>
     `${item.code} ${item.description}`
       .toLowerCase()
       .includes(search.toLowerCase()),
@@ -45,13 +54,11 @@ function Builder() {
     (sum, line) => sum + line.quantity * line.unitPrice,
     0,
   );
-  const issued = new Date();
   const valid = new Date();
   valid.setDate(valid.getDate() + validDays);
-  const quoteNumber = `HI-${issued.getFullYear()}-${String(issued.getMonth() + 1).padStart(2, "0")}001`;
 
   function add(productId: string) {
-    const product = previewProducts.find((item) => item.id === productId)!;
+    const product = products.find((item) => item.id === productId)!;
     setLines((current) => {
       const found = current.find((line) => line.productId === productId);
       return found
@@ -69,6 +76,43 @@ function Builder() {
     );
   }
 
+  async function saveQuotation(generatePdf = false) {
+    if (!client || lines.length === 0) return;
+    const items = lines.map((line) => {
+      const product = products.find((item) => item.id === line.productId)!;
+      return {
+        product_id: product.id,
+        code: product.code,
+        description: product.description,
+        presentation: product.presentation,
+        unit: product.unit,
+        quantity: line.quantity,
+        unit_price: line.unitPrice,
+        total_value: line.quantity * line.unitPrice,
+      };
+    });
+    if (window.halexDesktop) {
+      await window.halexDesktop.quotations.save({
+        quote_number: quoteNumber,
+        client_id: client.id,
+        issued_at: issued.toISOString().slice(0, 10),
+        valid_until: valid.toISOString().slice(0, 10),
+        status: "draft",
+        seller,
+        payment_terms: payment,
+        delivery_terms: delivery,
+        freight_terms: freight,
+        notes,
+        total_value: subtotal,
+        items,
+      });
+      setNotice("Cotação salva no computador.");
+      if (generatePdf) await window.halexDesktop.quotations.pdf(quoteNumber);
+    } else if (generatePdf) {
+      window.print();
+    }
+  }
+
   return (
     <div className="space-y-6 pb-16">
       <header className="print-hidden page-hero flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -83,15 +127,15 @@ function Builder() {
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => void saveQuotation(false)}
             className="brand-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-bold"
           >
             <Printer size={15} />
-            Imprimir
+            Salvar
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => void saveQuotation(true)}
             className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold"
           >
             <FileDown size={15} />
@@ -99,6 +143,11 @@ function Builder() {
           </button>
         </div>
       </header>
+      {notice && (
+        <div className="print-hidden rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
+          {notice}
+        </div>
+      )}
 
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_480px]">
         <div className="print-hidden space-y-5">
@@ -112,7 +161,7 @@ function Builder() {
                   value={clientId}
                   onChange={(e) => setClientId(e.target.value)}
                 >
-                  {previewClients.map((item) => (
+                  {clients.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.code} · {item.name}
                     </option>
@@ -227,7 +276,7 @@ function Builder() {
             </div>
             <div className="divide-y divide-stone-100">
               {lines.map((line, index) => {
-                const product = previewProducts.find(
+                const product = products.find(
                   (item) => item.id === line.productId,
                 )!;
                 return (
@@ -366,7 +415,7 @@ function Builder() {
               </thead>
               <tbody>
                 {lines.map((line, index) => {
-                  const product = previewProducts.find(
+                  const product = products.find(
                     (item) => item.id === line.productId,
                   )!;
                   return (

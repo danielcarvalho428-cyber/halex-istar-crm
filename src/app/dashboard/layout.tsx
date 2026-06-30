@@ -1,8 +1,8 @@
-﻿'use client';
+﻿"use client";
 
-import React, { useState } from 'react';
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import React, { useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen,
   Building2,
@@ -17,10 +17,10 @@ import {
   Settings,
   Users,
   X,
-} from 'lucide-react';
-import type { AccountRole } from '../../types';
-import NotificationBell from '../../components/NotificationBell';
-import CompanyFooter from '../../components/CompanyFooter';
+} from "lucide-react";
+import type { AccountRole } from "../../types";
+import NotificationBell from "../../components/NotificationBell";
+import CompanyFooter from "../../components/CompanyFooter";
 
 interface SidebarLinkProps {
   href: string;
@@ -35,7 +35,7 @@ function SidebarLink({ href, icon, label, active, onClick }: SidebarLinkProps) {
     <Link
       href={href}
       onClick={onClick}
-      className={`sidebar-link ${active ? 'sidebar-link-active' : ''}`}
+      className={`sidebar-link ${active ? "sidebar-link-active" : ""}`}
     >
       {icon}
       <span>{label}</span>
@@ -51,61 +51,106 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [role, setRole] = useState<AccountRole>('viewer');
-  const [displayName, setDisplayName] = useState('');
-  const isPresentation = pathname === '/dashboard/apresentacao';
+  const [role, setRole] = useState<AccountRole>("viewer");
+  const [displayName, setDisplayName] = useState("");
+  const isPresentation = pathname === "/dashboard/apresentacao";
 
   React.useEffect(() => {
-    fetch('/api/auth/session', { credentials: 'same-origin' })
+    fetch("/api/auth/session", { credentials: "same-origin" })
       .then((response) => response.json())
       .then((result) => {
         if (result?.ok) {
-          setRole(result.data.role === 'admin' ? 'admin' : 'viewer');
-          setDisplayName(result.data.displayName || result.data.username || '');
+          setRole(result.data.role === "admin" ? "admin" : "viewer");
+          setDisplayName(result.data.displayName || result.data.username || "");
         }
       })
       .catch(() => {});
   }, []);
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.replace('/login');
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
     router.refresh();
   };
 
-  const isAdmin = role === 'admin';
+  const isAdmin = role === "admin";
   const menuGroups = [
     {
-      label: 'Comercial',
+      label: "Comercial",
       items: [
-        { href: '/dashboard', icon: <LayoutDashboard size={17} />, label: 'Visão geral' },
-        { href: '/dashboard/clientes', icon: <Building2 size={17} />, label: 'Clientes privados' },
-        { href: '/dashboard/agenda', icon: <CalendarClock size={17} />, label: 'Agenda e retornos' },
+        {
+          href: "/dashboard",
+          icon: <LayoutDashboard size={17} />,
+          label: "Visão geral",
+        },
+        {
+          href: "/dashboard/clientes",
+          icon: <Building2 size={17} />,
+          label: "Clientes privados",
+        },
+        {
+          href: "/dashboard/agenda",
+          icon: <CalendarClock size={17} />,
+          label: "Agenda e retornos",
+        },
       ],
     },
     {
-      label: 'Cotações',
+      label: "Cotações",
       items: [
-        { href: '/dashboard/cotacoes/nova', icon: <FilePlus2 size={17} />, label: 'Nova cotação' },
-        { href: '/dashboard/cotacoes', icon: <ReceiptText size={17} />, label: 'Histórico de cotações' },
-        { href: '/dashboard/catalogo', icon: <PackageSearch size={17} />, label: 'Tabela de produtos' },
+        {
+          href: "/dashboard/cotacoes/nova",
+          icon: <FilePlus2 size={17} />,
+          label: "Nova cotação",
+        },
+        {
+          href: "/dashboard/cotacoes",
+          icon: <ReceiptText size={17} />,
+          label: "Histórico de cotações",
+        },
+        {
+          href: "/dashboard/catalogo",
+          icon: <PackageSearch size={17} />,
+          label: "Tabela de produtos",
+        },
       ],
     },
-    ...(isAdmin ? [
-      {
-        label: 'Administração',
-        items: [
-          { href: '/dashboard/admin/accounts', icon: <Users size={17} />, label: 'Contas' },
-          { href: '/dashboard/configuracoes', icon: <Settings size={17} />, label: 'Papel timbrado' },
-          { href: '/dashboard/importar', icon: <BookOpen size={17} />, label: 'Importar dados' },
-          { href: '/dashboard/backup/data', icon: <Database size={17} />, label: 'Backup' },
-        ],
-      },
-    ] : []),
+    ...(isAdmin
+      ? [
+          {
+            label: "Administração",
+            items: [
+              {
+                href: "/dashboard/admin/accounts",
+                icon: <Users size={17} />,
+                label: "Contas",
+              },
+              {
+                href: "/dashboard/configuracoes",
+                icon: <Settings size={17} />,
+                label: "Papel timbrado",
+              },
+              {
+                href: "/dashboard/importar",
+                icon: <BookOpen size={17} />,
+                label: "Importar dados",
+              },
+              {
+                href: "/dashboard/backup-local",
+                icon: <Database size={17} />,
+                label: "Backup",
+              },
+            ],
+          },
+        ]
+      : []),
   ];
 
   const nav = (
-    <nav aria-label="Navegação principal" className="relative z-10 flex flex-1 flex-col gap-6">
+    <nav
+      aria-label="Navegação principal"
+      className="relative z-10 flex flex-1 flex-col gap-6"
+    >
       {menuGroups.map((group) => (
         <div key={group.label}>
           <p className="sidebar-section-label">{group.label}</p>
@@ -118,11 +163,12 @@ export default function DashboardLayout({
                 label={item.label}
                 active={
                   pathname === item.href ||
-                  (
-                    item.href !== '/dashboard' &&
+                  (item.href !== "/dashboard" &&
                     pathname.startsWith(`${item.href}/`) &&
-                    !(item.href === '/dashboard/cotacoes' && pathname.startsWith('/dashboard/cotacoes/nova'))
-                  )
+                    !(
+                      item.href === "/dashboard/cotacoes" &&
+                      pathname.startsWith("/dashboard/cotacoes/nova")
+                    ))
                 }
                 onClick={() => setMobileMenuOpen(false)}
               />
@@ -145,7 +191,11 @@ export default function DashboardLayout({
           <NotificationBell />
         </div>
         {nav}
-        <SidebarFooter role={role} displayName={displayName} onLogout={handleLogout} />
+        <SidebarFooter
+          role={role}
+          displayName={displayName}
+          onLogout={handleLogout}
+        />
       </aside>
 
       {mobileMenuOpen && (
@@ -153,12 +203,21 @@ export default function DashboardLayout({
           <aside className="side-rail flex w-[280px] animate-fade-in flex-col gap-8 p-6 shadow-2xl">
             <div className="flex items-center justify-between">
               <BrandHeader compact />
-              <button type="button" aria-label="Fechar menu" onClick={() => setMobileMenuOpen(false)} className="relative z-10 text-stone-400 hover:text-white">
+              <button
+                type="button"
+                aria-label="Fechar menu"
+                onClick={() => setMobileMenuOpen(false)}
+                className="relative z-10 text-stone-400 hover:text-white"
+              >
                 <X size={20} />
               </button>
             </div>
             {nav}
-            <SidebarFooter role={role} displayName={displayName} onLogout={handleLogout} />
+            <SidebarFooter
+              role={role}
+              displayName={displayName}
+              onLogout={handleLogout}
+            />
           </aside>
         </div>
       )}
@@ -192,11 +251,15 @@ export default function DashboardLayout({
 function BrandHeader({ compact = false }: { compact?: boolean }) {
   return (
     <div className="mb-2 flex items-center gap-2">
-      <div className={`${compact ? 'h-8 w-8' : 'h-10 w-10'} brand-mark flex items-center justify-center rounded-lg text-sm font-black`}>
+      <div
+        className={`${compact ? "h-8 w-8" : "h-10 w-10"} brand-mark flex items-center justify-center rounded-lg text-sm font-black`}
+      >
         LL
       </div>
       <div>
-        <p className="text-base font-semibold leading-none text-white">Halex Istar CRM</p>
+        <p className="text-base font-semibold leading-none text-white">
+          Halex Istar CRM
+        </p>
         {!compact && (
           <span className="mt-1 block text-[9px] font-bold uppercase tracking-[0.2em] text-amber-400">
             Clientes e cotações
@@ -219,9 +282,11 @@ function SidebarFooter({
   return (
     <div className="relative z-10 mt-auto flex flex-col gap-4 border-t border-white/8 pt-5">
       <div className="border-l border-amber-400/60 pl-3">
-        <p className="readable-name text-xs font-semibold text-white">{displayName || 'Usuário'}</p>
+        <p className="readable-name text-xs font-semibold text-white">
+          {displayName || "Usuário"}
+        </p>
         <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-stone-500">
-          {role === 'admin' ? 'Administrador' : 'Visualização'}
+          {role === "admin" ? "Administrador" : "Visualização"}
         </p>
       </div>
       <button
@@ -235,4 +300,3 @@ function SidebarFooter({
     </div>
   );
 }
-

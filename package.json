@@ -1,14 +1,22 @@
 {
   "name": "halex-istar-crm",
   "version": "0.1.0",
+  "description": "CRM offline para clientes privados e cotações Halex Istar",
+  "author": "Daniel Carvalho",
   "private": true,
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "node --test --experimental-strip-types src/**/*.test.ts",
-    "check": "npm run lint && npm run test && npm run build"
+    "check": "npm run lint && npm run test && npm run build",
+    "desktop:web": "next dev -p 3001",
+    "desktop:electron": "set ELECTRON_RUN_AS_NODE=&& electron .",
+    "desktop:dev": "concurrently -k \"npm:desktop:web\" \"wait-on http://localhost:3001/dashboard && npm run desktop:electron\"",
+    "desktop:prepare": "node scripts/prepare-desktop.cjs",
+    "desktop:installer": "npm run check && npm run desktop:prepare && electron-builder --win nsis"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
@@ -20,6 +28,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-window": "^1.8.8",
+    "sql.js": "^1.14.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
@@ -29,9 +38,34 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/react-window": "^1.8.8",
+    "@types/sql.js": "^1.4.11",
+    "concurrently": "^10.0.3",
+    "electron": "^43.0.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "^16.2.9",
     "tailwindcss": "^4.3.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.0.10"
+  },
+  "build": {
+    "appId": "br.com.halexistar.crm",
+    "productName": "Halex Istar CRM",
+    "asar": true,
+    "directories": { "output": "release" },
+    "files": ["electron/**/*", "package.json", "node_modules/**/*"],
+    "extraResources": [
+      { "from": ".next/standalone", "to": "next", "filter": ["**/*"] }
+    ],
+    "win": {
+      "target": "nsis",
+      "artifactName": "Halex-Istar-CRM-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }
