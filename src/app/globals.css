@@ -1415,6 +1415,11 @@ label[aria-disabled="true"] {
   background: #fff8ec;
 }
 
+.quotation-sheet > :not(.letterhead-background) {
+  position: relative;
+  z-index: 1;
+}
+
 @media (max-width: 767px) {
   .workspace-canvas {
     font-size: 0.9375rem;

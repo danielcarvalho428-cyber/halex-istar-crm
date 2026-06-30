@@ -74,3 +74,18 @@ export function useDesktopQuotations() {
   }, []);
   return quotations;
 }
+
+export function useDesktopLetterhead() {
+  const [letterhead, setLetterhead] = useState<{
+    fileName: string;
+    mime: string;
+    dataUrl: string | null;
+  } | null>(null);
+  useEffect(() => {
+    window.halexDesktop?.settings
+      .getLetterhead()
+      .then(setLetterhead)
+      .catch(() => {});
+  }, []);
+  return letterhead;
+}

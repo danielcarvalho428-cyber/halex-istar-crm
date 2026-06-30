@@ -9,7 +9,11 @@ import {
   previewClients,
   previewProducts,
 } from "@/lib/crm-preview";
-import { useDesktopClients, useDesktopProducts } from "@/lib/use-desktop-data";
+import {
+  useDesktopClients,
+  useDesktopLetterhead,
+  useDesktopProducts,
+} from "@/lib/use-desktop-data";
 
 type QuoteLine = { productId: string; quantity: number; unitPrice: number };
 
@@ -17,6 +21,7 @@ function Builder() {
   const params = useSearchParams();
   const clients = useDesktopClients();
   const products = useDesktopProducts();
+  const letterhead = useDesktopLetterhead();
   const [clientId, setClientId] = useState(
     params.get("cliente") || previewClients[0].id,
   );
@@ -357,24 +362,33 @@ function Builder() {
         </div>
 
         <aside className="print-document mx-auto w-full max-w-[740px] self-start bg-white p-5 shadow-sm 2xl:sticky 2xl:top-6">
-          <div className="quotation-sheet flex min-h-[920px] flex-col border border-stone-200 p-8">
-            <header className="border-b-2 border-[#172033] pb-5">
-              <div className="flex items-start justify-between gap-5">
-                <div>
-                  <p className="text-2xl font-black text-[#172033]">
-                    HALEX ISTAR
-                  </p>
-                  <p className="mt-1 text-[10px] font-bold uppercase text-amber-700">
-                    Cotação comercial
-                  </p>
+          <div
+            className={`quotation-sheet relative flex min-h-[920px] flex-col border border-stone-200 bg-white bg-[length:100%_100%] bg-no-repeat ${letterhead?.dataUrl ? "px-12 pb-12 pt-28" : "p-8"}`}
+            style={
+              letterhead?.dataUrl
+                ? { backgroundImage: `url(${letterhead.dataUrl})` }
+                : undefined
+            }
+          >
+            {!letterhead?.dataUrl && (
+              <header className="border-b-2 border-[#172033] pb-5">
+                <div className="flex items-start justify-between gap-5">
+                  <div>
+                    <p className="text-2xl font-black text-[#172033]">
+                      HALEX ISTAR
+                    </p>
+                    <p className="mt-1 text-[10px] font-bold uppercase text-amber-700">
+                      Cotação comercial
+                    </p>
+                  </div>
+                  <div className="rounded border border-dashed border-stone-300 px-3 py-2 text-center text-[9px] text-stone-400">
+                    Papel timbrado
+                    <br />
+                    será aplicado aqui
+                  </div>
                 </div>
-                <div className="rounded border border-dashed border-stone-300 px-3 py-2 text-center text-[9px] text-stone-400">
-                  Papel timbrado
-                  <br />
-                  será aplicado aqui
-                </div>
-              </div>
-            </header>
+              </header>
+            )}
             <section className="quotation-keep mt-6 grid grid-cols-3 gap-4 border-b border-stone-200 pb-5 text-xs">
               <div>
                 <p className="text-stone-400">Cotação</p>

@@ -56,6 +56,13 @@ export default function DashboardLayout({
   const isPresentation = pathname === "/dashboard/apresentacao";
 
   React.useEffect(() => {
+    if (window.halexDesktop) {
+      queueMicrotask(() => {
+        setRole("admin");
+        setDisplayName("Usuário local");
+      });
+      return;
+    }
     fetch("/api/auth/session", { credentials: "same-origin" })
       .then((response) => response.json())
       .then((result) => {

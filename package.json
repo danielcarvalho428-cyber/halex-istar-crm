@@ -1,6 +1,6 @@
 {
   "name": "halex-istar-crm",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "CRM offline para clientes privados e cotações Halex Istar",
   "author": "Daniel Carvalho",
   "private": true,
@@ -52,10 +52,22 @@
     "appId": "br.com.halexistar.crm",
     "productName": "Halex Istar CRM",
     "asar": true,
-    "directories": { "output": "release" },
-    "files": ["electron/**/*", "package.json", "node_modules/**/*"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
     "extraResources": [
-      { "from": ".next/standalone", "to": "next", "filter": ["**/*"] }
+      {
+        "from": ".next/standalone",
+        "to": "next",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "win": {
       "target": "nsis",

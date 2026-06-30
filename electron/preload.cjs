@@ -17,6 +17,14 @@ contextBridge.exposeInMainWorld("halexDesktop", {
   },
   settings: {
     chooseLetterhead: () => ipcRenderer.invoke("settings:letterhead"),
+    getLetterhead: () => ipcRenderer.invoke("settings:letterhead:get"),
+  },
+  imports: {
+    products: () => ipcRenderer.invoke("import:products"),
+    clients: () => ipcRenderer.invoke("import:clients"),
+    priceVersions: () => ipcRenderer.invoke("prices:versions"),
+    activatePriceVersion: (versionId) =>
+      ipcRenderer.invoke("prices:activate", versionId),
   },
   backup: {
     create: () => ipcRenderer.invoke("backup:create"),

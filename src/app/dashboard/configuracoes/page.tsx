@@ -1,8 +1,16 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FileImage, Upload } from "lucide-react";
 export default function SettingsPage() {
   const [file, setFile] = useState("");
+  useEffect(() => {
+    window.halexDesktop?.settings
+      .getLetterhead()
+      .then((current) => {
+        if (current) setFile(current.fileName);
+      })
+      .catch(() => {});
+  }, []);
   async function chooseLetterhead(event: React.MouseEvent<HTMLLabelElement>) {
     if (!window.halexDesktop) return;
     event.preventDefault();
@@ -39,7 +47,8 @@ export default function SettingsPage() {
             Selecionar papel timbrado
           </p>
           <p className="mt-1 text-xs text-stone-500">
-            O arquivo será armazenado quando o novo Supabase for conectado.
+            PNG ou JPG será aplicado diretamente à cotação. O arquivo fica
+            armazenado somente neste computador.
           </p>
           <input
             type="file"

@@ -27,3 +27,6 @@ Sem credenciais Supabase, o ambiente de desenvolvimento abre em modo de prévia 
 - Gerador de cotação com cliente e produtos
 - Documento pronto para impressão/PDF
 - Configuração futura do papel timbrado Halex Istar
+- Importação de clientes por Excel/CSV com sincronização pelo código
+- Tabelas de preços versionadas, com troca e restauração de versões anteriores
+- Papel timbrado PNG/JPG aplicado diretamente à cotação e ao PDF

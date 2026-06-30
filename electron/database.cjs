@@ -40,9 +40,19 @@ CREATE TABLE IF NOT EXISTS quotation_items (
   quantity REAL NOT NULL, unit_price REAL NOT NULL, total_value REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS price_table_versions (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, imported_at TEXT NOT NULL,
+  row_count INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS price_table_items (
+  id TEXT PRIMARY KEY, version_id TEXT NOT NULL REFERENCES price_table_versions(id) ON DELETE CASCADE,
+  code TEXT NOT NULL, description TEXT NOT NULL, presentation TEXT, brand TEXT,
+  unit TEXT NOT NULL, price REAL NOT NULL, minimum_price REAL
+);
 CREATE INDEX IF NOT EXISTS idx_clients_next_purchase ON clients(next_purchase, status);
 CREATE INDEX IF NOT EXISTS idx_contacts_client ON contacts(client_id, contacted_at DESC);
 CREATE INDEX IF NOT EXISTS idx_quotes_client ON quotations(client_id, issued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_price_items_version ON price_table_items(version_id, code);
 `;
 
 const seedClients = [
@@ -190,6 +200,203 @@ class LocalDatabase {
     return this.rows(
       `SELECT q.*, c.name AS client_name FROM quotations q JOIN clients c ON c.id=q.client_id ORDER BY q.issued_at DESC, q.created_at DESC`,
     );
+  }
+  listPriceVersions() {
+    return this.rows(
+      "SELECT * FROM price_table_versions ORDER BY imported_at DESC",
+    );
+  }
+  getSetting(key) {
+    return (
+      this.rows("SELECT value FROM settings WHERE key = ?", [key])[0]?.value ||
+      null
+    );
+  }
+  setSetting(key, value) {
+    this.run(
+      "INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      [key, String(value)],
+    );
+  }
+
+  importClients(rows, sourceName) {
+    const now = new Date().toISOString();
+    let added = 0,
+      updated = 0,
+      ignored = 0;
+    this.db.run("BEGIN");
+    try {
+      this.db.run("UPDATE clients SET status = 'inactive', updated_at = ?", [
+        now,
+      ]);
+      for (const value of rows) {
+        if (!value.name || !value.code) {
+          ignored += 1;
+          continue;
+        }
+        const existing = this.rows("SELECT id FROM clients WHERE code = ?", [
+          value.code,
+        ])[0];
+        const id = existing?.id || crypto.randomUUID();
+        this.db.run(
+          `INSERT INTO clients (id,code,name,document,city,state,contact,phone,email,address,status,last_purchase,average_cycle_days,next_purchase,total_12m,notes,created_at,updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET name=excluded.name,document=excluded.document,city=excluded.city,state=excluded.state,contact=excluded.contact,phone=excluded.phone,email=excluded.email,address=excluded.address,status='active',last_purchase=excluded.last_purchase,average_cycle_days=excluded.average_cycle_days,next_purchase=excluded.next_purchase,total_12m=excluded.total_12m,notes=excluded.notes,updated_at=excluded.updated_at`,
+          [
+            id,
+            value.code,
+            value.name,
+            value.document || null,
+            value.city || null,
+            value.state || null,
+            value.contact || null,
+            value.phone || null,
+            value.email || null,
+            value.address || null,
+            "active",
+            value.last_purchase || null,
+            value.average_cycle_days || null,
+            value.next_purchase || null,
+            Number(value.total_12m) || 0,
+            value.notes || null,
+            now,
+            now,
+          ],
+        );
+        if (existing) updated += 1;
+        else added += 1;
+      }
+      this.db.run(
+        "INSERT INTO settings(key,value) VALUES('last_client_import',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [
+          JSON.stringify({
+            sourceName,
+            importedAt: now,
+            added,
+            updated,
+            ignored,
+          }),
+        ],
+      );
+      this.db.run("COMMIT");
+      this.persist();
+      return { added, updated, ignored, total: rows.length };
+    } catch (error) {
+      this.db.run("ROLLBACK");
+      throw error;
+    }
+  }
+
+  importPriceTable(rows, name) {
+    const now = new Date().toISOString();
+    const versionId = crypto.randomUUID();
+    let imported = 0,
+      ignored = 0;
+    this.db.run("BEGIN");
+    try {
+      this.db.run("UPDATE price_table_versions SET active = 0");
+      this.db.run(
+        "INSERT INTO price_table_versions(id,name,imported_at,row_count,active) VALUES(?,?,?,?,1)",
+        [versionId, name, now, rows.length],
+      );
+      this.db.run("UPDATE products SET active = 0, updated_at = ?", [now]);
+      const snapshot = this.db.prepare(
+        "INSERT INTO price_table_items(id,version_id,code,description,presentation,brand,unit,price,minimum_price) VALUES(?,?,?,?,?,?,?,?,?)",
+      );
+      for (const value of rows) {
+        if (
+          !value.code ||
+          !value.description ||
+          !Number.isFinite(Number(value.price))
+        ) {
+          ignored += 1;
+          continue;
+        }
+        snapshot.run([
+          crypto.randomUUID(),
+          versionId,
+          value.code,
+          value.description,
+          value.presentation || null,
+          value.brand || "Halex Istar",
+          value.unit || "UN",
+          Number(value.price),
+          value.minimum_price == null ? null : Number(value.minimum_price),
+        ]);
+        const existing = this.rows("SELECT id FROM products WHERE code = ?", [
+          value.code,
+        ])[0];
+        this.db.run(
+          `INSERT INTO products(id,code,description,presentation,brand,unit,price,minimum_price,active,updated_at) VALUES(?,?,?,?,?,?,?,?,1,?)
+          ON CONFLICT(code) DO UPDATE SET description=excluded.description,presentation=excluded.presentation,brand=excluded.brand,unit=excluded.unit,price=excluded.price,minimum_price=excluded.minimum_price,active=1,updated_at=excluded.updated_at`,
+          [
+            existing?.id || crypto.randomUUID(),
+            value.code,
+            value.description,
+            value.presentation || null,
+            value.brand || "Halex Istar",
+            value.unit || "UN",
+            Number(value.price),
+            value.minimum_price == null ? null : Number(value.minimum_price),
+            now,
+          ],
+        );
+        imported += 1;
+      }
+      snapshot.free();
+      this.db.run(
+        "UPDATE price_table_versions SET row_count = ? WHERE id = ?",
+        [imported, versionId],
+      );
+      this.db.run("COMMIT");
+      this.persist();
+      return { versionId, imported, ignored, total: rows.length };
+    } catch (error) {
+      this.db.run("ROLLBACK");
+      throw error;
+    }
+  }
+
+  activatePriceVersion(versionId) {
+    const rows = this.rows(
+      "SELECT * FROM price_table_items WHERE version_id = ?",
+      [versionId],
+    );
+    if (!rows.length) throw new Error("Tabela de preços sem itens.");
+    const now = new Date().toISOString();
+    this.db.run("BEGIN");
+    try {
+      this.db.run(
+        "UPDATE price_table_versions SET active = CASE WHEN id = ? THEN 1 ELSE 0 END",
+        [versionId],
+      );
+      this.db.run("UPDATE products SET active = 0, updated_at = ?", [now]);
+      for (const value of rows) {
+        const existing = this.rows("SELECT id FROM products WHERE code = ?", [
+          value.code,
+        ])[0];
+        this.db.run(
+          `INSERT INTO products(id,code,description,presentation,brand,unit,price,minimum_price,active,updated_at) VALUES(?,?,?,?,?,?,?,?,1,?)
+          ON CONFLICT(code) DO UPDATE SET description=excluded.description,presentation=excluded.presentation,brand=excluded.brand,unit=excluded.unit,price=excluded.price,minimum_price=excluded.minimum_price,active=1,updated_at=excluded.updated_at`,
+          [
+            existing?.id || crypto.randomUUID(),
+            value.code,
+            value.description,
+            value.presentation,
+            value.brand,
+            value.unit,
+            value.price,
+            value.minimum_price,
+            now,
+          ],
+        );
+      }
+      this.db.run("COMMIT");
+      this.persist();
+      return rows.length;
+    } catch (error) {
+      this.db.run("ROLLBACK");
+      throw error;
+    }
   }
 
   saveClient(value) {
