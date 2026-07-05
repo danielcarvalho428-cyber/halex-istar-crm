@@ -1,37 +1,96 @@
-"use client";
+﻿"use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { FileDown, Plus, Printer, Search, Trash2 } from "lucide-react";
 import {
   appDate,
   money,
   previewClients,
-  previewProducts,
 } from "@/lib/crm-preview";
 import {
   useDesktopClients,
+  useDesktopAgreements,
   useDesktopLetterhead,
   useDesktopProducts,
+  useDesktopSalesPriceTable,
 } from "@/lib/use-desktop-data";
+import { agreementPriceFor } from "@/lib/agreement-pricing";
+import {
+  formatQuotationPriceInput,
+  parseQuotationPriceInput,
+} from "@/lib/quotation-price";
+import {
+  estimatedProductRowHeight,
+  paginateQuotationRows,
+} from "@/lib/quotation-pagination";
+import { isFullBoxQuantity, quotationLineTotal } from "@/lib/quotation-quantity";
+import {
+  DEFAULT_SALES_PRICE_TABLE,
+  DEFAULT_SALES_PRICE_REGION,
+  isSalesPriceRegion,
+  isSalesPriceTable,
+  SALES_PRICE_REGIONS,
+  SALES_PRICE_TABLES,
+  type SalesPriceTable,
+  type SalesPriceRegion,
+} from "@/lib/sales-price-table";
 
-type QuoteLine = { productId: string; quantity: number; unitPrice: number };
+type QuoteLine = { productId: string; quantity: number; unitPrice: number; brand?: string; quantityMode?: "boxes" | "units"; unitQuantity?: number };
+
+type StoredQuoteItem = {
+  product_id: string;
+  quantity: number;
+  unit_price: number;
+  brand?: string;
+  quantity_mode?: "boxes" | "units";
+  unit_quantity?: number;
+};
+
+type StoredQuote = {
+  id: string;
+  quote_number?: string;
+  client_id: string;
+  seller?: string;
+  representative_role?: string;
+  representative_phone?: string;
+  representative_email?: string;
+  sales_price_table?: string;
+  sales_price_region?: string;
+  payment_terms?: string;
+  delivery_terms?: string;
+  freight_terms?: string;
+  notes?: string;
+  issued_at?: string;
+  valid_until?: string;
+  items?: StoredQuoteItem[];
+};
+
+type RepresentativeDetails = {
+  email: string;
+  role: string;
+  phone: string;
+};
+
+// Local-time YYYY-MM-DD so the stored/printed date matches the quote number's
+// local day instead of shifting a day forward near midnight (UTC-3).
+function toDateInput(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
 
 function Builder() {
   const params = useSearchParams();
+  const editId = params.get("editId");
   const clients = useDesktopClients();
   const products = useDesktopProducts();
+  const agreements = useDesktopAgreements();
   const letterhead = useDesktopLetterhead();
+  const importedSalesPriceTable = useDesktopSalesPriceTable();
   const [clientId, setClientId] = useState(
     params.get("cliente") || previewClients[0].id,
   );
-  const [lines, setLines] = useState<QuoteLine[]>([
-    {
-      productId: previewProducts[0].id,
-      quantity: 1,
-      unitPrice: previewProducts[0].price,
-    },
-  ]);
+  const [lines, setLines] = useState<QuoteLine[]>([]);
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [validDays, setValidDays] = useState(15);
   const [payment, setPayment] = useState("30 dias");
@@ -43,36 +102,283 @@ function Builder() {
   const [notes, setNotes] = useState(
     "Preços expressos em reais. Produtos sujeitos à disponibilidade no momento da confirmação do pedido.",
   );
-  const [issued] = useState(() => new Date());
-  const [quoteNumber] = useState(() => {
+  const [representative, setRepresentative] = useState<RepresentativeDetails>({
+    email: "",
+    role: "Representante comercial",
+    phone: "",
+  });
+  const [representativeLoaded, setRepresentativeLoaded] = useState(false);
+  const [issued, setIssued] = useState(() => new Date());
+  const [quoteNumber, setQuoteNumber] = useState(() => {
     const now = new Date();
     return `HI-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
   });
   const [notice, setNotice] = useState("");
-  const client = clients.find((item) => item.id === clientId) || clients[0];
-  const filtered = products.filter((item) =>
-    `${item.code} ${item.description}`
-      .toLowerCase()
-      .includes(search.toLowerCase()),
+  const [salesPriceTable, setSalesPriceTable] = useState<SalesPriceTable>(
+    DEFAULT_SALES_PRICE_TABLE,
   );
-  const subtotal = lines.reduce(
-    (sum, line) => sum + line.quantity * line.unitPrice,
-    0,
+  const [salesPriceRegion, setSalesPriceRegion] = useState<SalesPriceRegion>(
+    DEFAULT_SALES_PRICE_REGION,
   );
+  // Once a new quotation is saved, reuse its id so a follow-up save (e.g. "Gerar
+  // PDF" after "Salvar") updates the same row instead of colliding on the
+  // UNIQUE quote_number.
+  const [savedId, setSavedId] = useState<string | null>(editId);
+
+  // These refs let the repricing effects tell a genuine user change (pick a new
+  // client/table) apart from a programmatic load of a stored quote. loadQuotation
+  // seeds them with the loaded values so it does NOT trigger a reprice.
+  const prevClientIdRef = useRef(clientId);
+  const initialAgreementAppliedRef = useRef(false);
+  const previousSalesPriceTableRef = useRef(salesPriceTable);
+  const previousSalesPriceRegionRef = useRef(salesPriceRegion);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      const saved = localStorage.getItem("quotationRepresentative");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved) as Partial<RepresentativeDetails> & { name?: string };
+          setSeller(parsed.name || "Paulo Roberto");
+          setRepresentative({
+            email: parsed.email || "",
+            role: parsed.role || "Representante comercial",
+            phone: parsed.phone || "",
+          });
+        } catch {}
+      }
+      setRepresentativeLoaded(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!representativeLoaded) return;
+    localStorage.setItem("quotationRepresentative", JSON.stringify({
+      name: seller,
+      ...representative,
+    }));
+  }, [representative, representativeLoaded, seller]);
+
+  useEffect(() => {
+    if (!editId) return;
+    async function loadQuotation() {
+      let quote: StoredQuote | null = null;
+      if (window.halexDesktop) {
+        quote = await window.halexDesktop.quotations.get(editId!) as StoredQuote | null;
+      } else {
+        const stored = localStorage.getItem("manualQuotations");
+        const parsed: StoredQuote[] = stored ? JSON.parse(stored) : [];
+        quote = parsed.find((item) => String(item.id) === editId) || null;
+      }
+      if (quote) {
+          queueMicrotask(() => {
+            setClientId(quote.client_id);
+            if (quote.quote_number) setQuoteNumber(quote.quote_number);
+            if (quote.issued_at) setIssued(new Date(`${quote.issued_at}T12:00:00`));
+            setSeller(quote.seller || "Paulo Roberto");
+            setRepresentative({
+              email: quote.representative_email || "",
+              role: quote.representative_role || "Representante comercial",
+              phone: quote.representative_phone || "",
+            });
+            if (isSalesPriceTable(quote.sales_price_table)) {
+              setSalesPriceTable(quote.sales_price_table);
+              previousSalesPriceTableRef.current = quote.sales_price_table;
+            }
+            if (isSalesPriceRegion(quote.sales_price_region)) {
+              setSalesPriceRegion(quote.sales_price_region);
+              previousSalesPriceRegionRef.current = quote.sales_price_region;
+            }
+            // Keep the loaded prices exactly as saved — sync the client ref so
+            // the client-change effect doesn't recalculate them from the table.
+            prevClientIdRef.current = quote.client_id;
+            setPayment(quote.payment_terms || "30 dias");
+            setDelivery(
+              quote.delivery_terms || "Até 10 dias úteis após confirmação",
+            );
+            setFreight(
+              quote.freight_terms || "CIF - incluso no valor da proposta",
+            );
+            setNotes(quote.notes || "");
+
+            if (quote.issued_at && quote.valid_until) {
+              const issuedDate = new Date(`${quote.issued_at}T12:00:00`);
+              const validDate = new Date(`${quote.valid_until}T12:00:00`);
+              const diffTime = Math.abs(
+                validDate.getTime() - issuedDate.getTime(),
+              );
+              setValidDays(Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+            }
+
+            if (quote.items) {
+              setLines(
+                quote.items.map((item) => ({
+                  productId: item.product_id,
+                  quantity: item.quantity,
+                  unitPrice: item.unit_price,
+                  brand: item.brand || "",
+                  quantityMode: item.quantity_mode || "boxes",
+                  unitQuantity: item.unit_quantity,
+                })),
+              );
+            }
+          });
+      }
+    }
+    void loadQuotation();
+  }, [editId]);
+
+  // O(1) lookups so per-row pricing in the catalog doesn't scan the whole
+  // product/client list on every render (the catalog can hold 1-2k products).
+  const productById = useMemo(
+    () => new Map(products.map((item) => [item.id, item])),
+    [products],
+  );
+  const clientById = useMemo(
+    () => new Map(clients.map((item) => [item.id, item])),
+    [clients],
+  );
+
+  const priceForClient = useCallback((productId: string, selectedClientId = clientId) => {
+    const product = productById.get(productId);
+    if (!product) return 0;
+    const selectedClient = clientById.get(selectedClientId);
+    const legacyPrice = selectedClient?.clientType === "distribuidor"
+      ? (product.priceDistribuidor ?? product.price)
+      : (product.priceHospital ?? product.price);
+    const importedPrice = importedSalesPriceTable
+      ?.prices?.[salesPriceRegion]?.[salesPriceTable]?.[product.code];
+    // No baked-in price table: use the imported (current) table, else the
+    // product's own catalog price — never a hardcoded, silently-stale value.
+    const fallbackPrice = importedPrice ?? legacyPrice;
+    return agreementPriceFor(
+      agreements,
+      selectedClientId,
+      product.code,
+      fallbackPrice,
+    );
+  }, [agreements, clientId, clientById, importedSalesPriceTable, productById, salesPriceRegion, salesPriceTable]);
+
+  // Automatically update prices in the cart when client changes (Hospital vs Distribuidor)
+  useEffect(() => {
+    if (prevClientIdRef.current !== clientId) {
+      prevClientIdRef.current = clientId;
+      if (products.length === 0 || clients.length === 0) return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLines((current) =>
+        current.map((line) => {
+          const product = productById.get(line.productId);
+          return {
+            ...line,
+            unitPrice: priceForClient(line.productId),
+            brand: line.brand || product?.brand || "",
+          };
+        })
+      );
+    }
+  }, [clientId, products, clients, productById, agreements, priceForClient]);
+
+  useEffect(() => {
+    if (
+      previousSalesPriceTableRef.current === salesPriceTable &&
+      previousSalesPriceRegionRef.current === salesPriceRegion
+    ) return;
+    previousSalesPriceTableRef.current = salesPriceTable;
+    previousSalesPriceRegionRef.current = salesPriceRegion;
+    setPriceDrafts({});
+    setLines((current) => current.map((line) => ({
+      ...line,
+      unitPrice: priceForClient(line.productId),
+    })));
+  }, [priceForClient, salesPriceRegion, salesPriceTable]);
+
+  useEffect(() => {
+    if (
+      editId ||
+      initialAgreementAppliedRef.current ||
+      agreements.length === 0 ||
+      productById.size === 0
+    ) return;
+    initialAgreementAppliedRef.current = true;
+    setLines((current) =>
+      current.map((line) => {
+        const product = productById.get(line.productId);
+        return {
+          ...line,
+          unitPrice: priceForClient(line.productId),
+          brand: line.brand || product?.brand || "",
+        };
+      }),
+    );
+  }, [agreements, editId, productById, priceForClient]);
+
+  const client = clientById.get(clientId) || clients[0];
+  const salesPriceRegions = importedSalesPriceTable?.regions ?? SALES_PRICE_REGIONS;
+  const salesPriceTables = importedSalesPriceTable?.categories ?? SALES_PRICE_TABLES;
+  const salesPricePeriod = importedSalesPriceTable?.period ?? "não importada";
+  const noPriceTable = !importedSalesPriceTable;
+  const clientAgreement = agreements.find((group) =>
+    group.clients.some((member) => member.id === clientId),
+  );
+  const filtered = useMemo(
+    () =>
+      products.filter((item) =>
+        `${item.code} ${item.description}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+      ),
+    [products, search],
+  );
+  const totalForLine = (line: QuoteLine) => {
+    const product = productById.get(line.productId);
+    if (!product) return 0;
+    return quotationLineTotal(line.quantity, product.packSize || 1, line.unitPrice);
+  };
+  const subtotal = lines.reduce((sum, line) => sum + totalForLine(line), 0);
   const valid = new Date();
   valid.setDate(valid.getDate() + validDays);
+  // Memoized so typing in the catalog search (or any other field) doesn't
+  // re-run pagination over the quote lines on every keystroke.
+  const quotationPages = useMemo(() => {
+    const rows = lines.flatMap((line) => {
+      const product = productById.get(line.productId);
+      if (!product) return [];
+      return [{
+        ...line,
+        product,
+        estimatedHeight: estimatedProductRowHeight(
+          product.description,
+          product.presentation,
+        ),
+      }];
+    });
+    return paginateQuotationRows(rows);
+  }, [lines, productById]);
 
   function add(productId: string) {
-    const product = products.find((item) => item.id === productId)!;
+    const unitPrice = priceForClient(productId);
+
     setLines((current) => {
       const found = current.find((line) => line.productId === productId);
+      const product = productById.get(productId);
+      const brand = product?.brand || "";
+      const packSize = Math.max(1, product?.packSize || 1);
       return found
         ? current.map((line) =>
             line.productId === productId
-              ? { ...line, quantity: line.quantity + 1 }
+              ? {
+                  ...line,
+                  quantity: line.quantity + 1,
+                  // Keep the unit count in sync when the line is expressed in units.
+                  unitQuantity:
+                    line.quantityMode === "units"
+                      ? (line.quantity + 1) * packSize
+                      : line.unitQuantity,
+                  brand: line.brand || brand,
+                }
               : line,
           )
-        : [...current, { productId, quantity: 1, unitPrice: product.price }];
+        : [...current, { productId, quantity: 1, unitPrice, brand, quantityMode: "boxes" }];
     });
   }
   function update(index: number, patch: Partial<QuoteLine>) {
@@ -83,6 +389,23 @@ function Builder() {
 
   async function saveQuotation(generatePdf = false) {
     if (!client || lines.length === 0) return;
+    const invalidLine = lines.find((line) => {
+      if (line.quantityMode !== "units") return false;
+      const product = products.find((item) => item.id === line.productId);
+      const packSize = Math.max(1, product?.packSize || 1);
+      return !isFullBoxQuantity(line.unitQuantity || 0, packSize);
+    });
+    if (invalidLine) {
+      setNotice("A quantidade em unidades deve completar caixas inteiras.");
+      return;
+    }
+    const hasUnavailable = lines.some(
+      (line) => !products.find((item) => item.id === line.productId),
+    );
+    if (hasUnavailable) {
+      setNotice("Remova os itens indisponíveis antes de salvar.");
+      return;
+    }
     const items = lines.map((line) => {
       const product = products.find((item) => item.id === line.productId)!;
       return {
@@ -90,31 +413,60 @@ function Builder() {
         code: product.code,
         description: product.description,
         presentation: product.presentation,
+        brand: line.brand || product.brand || "",
         unit: product.unit,
         quantity: line.quantity,
         unit_price: line.unitPrice,
-        total_value: line.quantity * line.unitPrice,
+        total_value: totalForLine(line),
+        quantity_mode: line.quantityMode || "boxes",
+        unit_quantity: line.quantityMode === "units" ? line.unitQuantity : null,
       };
     });
-    if (window.halexDesktop) {
-      await window.halexDesktop.quotations.save({
-        quote_number: quoteNumber,
-        client_id: client.id,
-        issued_at: issued.toISOString().slice(0, 10),
-        valid_until: valid.toISOString().slice(0, 10),
-        status: "draft",
-        seller,
-        payment_terms: payment,
-        delivery_terms: delivery,
-        freight_terms: freight,
-        notes,
-        total_value: subtotal,
-        items,
-      });
-      setNotice("Cotação salva no computador.");
-      if (generatePdf) await window.halexDesktop.quotations.pdf(quoteNumber);
-    } else if (generatePdf) {
-      window.print();
+    const id = savedId || `manual-${Date.now()}`;
+    const newQuote = {
+      id,
+      client_name: client.name,
+      quote_number: quoteNumber,
+      client_id: client.id,
+      issued_at: toDateInput(issued),
+      valid_until: toDateInput(valid),
+      status: "draft",
+      seller,
+      representative_role: representative.role,
+      representative_phone: representative.phone,
+      representative_email: representative.email,
+      sales_price_table: salesPriceTable,
+      sales_price_region: salesPriceRegion,
+      payment_terms: payment,
+      delivery_terms: delivery,
+      freight_terms: freight,
+      notes,
+      total_value: subtotal,
+      items,
+    };
+
+    try {
+      if (window.halexDesktop) {
+        await window.halexDesktop.quotations.save(newQuote);
+        setSavedId(id);
+        setNotice("Cotação salva no computador.");
+        if (generatePdf) await window.halexDesktop.quotations.pdf(quoteNumber);
+      } else {
+        let manualQuotations: Array<StoredQuote | typeof newQuote> = [];
+        try {
+          const parsed = JSON.parse(localStorage.getItem("manualQuotations") || "[]");
+          if (Array.isArray(parsed)) manualQuotations = parsed;
+        } catch {}
+        const index = manualQuotations.findIndex((quote) => String(quote.id) === id);
+        if (index > -1) manualQuotations[index] = newQuote;
+        else manualQuotations.push(newQuote);
+        localStorage.setItem("manualQuotations", JSON.stringify(manualQuotations));
+        setSavedId(id);
+        setNotice("Cotação salva localmente com sucesso.");
+        if (generatePdf) window.print();
+      }
+    } catch {
+      setNotice("Não foi possível salvar a cotação. Tente novamente.");
     }
   }
 
@@ -153,13 +505,18 @@ function Builder() {
           {notice}
         </div>
       )}
+      {noPriceTable && (
+        <div className="print-hidden rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+          Nenhuma tabela de preços foi importada. Os valores usam o preço de catálogo de cada produto — importe a tabela atual em Importar antes de gerar cotações para garantir os preços vigentes.
+        </div>
+      )}
 
-      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_480px]">
-        <div className="print-hidden space-y-5">
+      <div className="grid min-w-0 gap-6 2xl:grid-cols-[minmax(0,1fr)_480px]">
+        <div className="print-hidden min-w-0 space-y-5">
           <section className="glass-card p-5">
             <h2 className="font-semibold">Cliente e condições</h2>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <label className="text-xs font-bold md:col-span-2">
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <label className="text-xs font-bold md:col-span-3">
                 Cliente
                 <select
                   className="form-input mt-2 w-full"
@@ -173,6 +530,41 @@ function Builder() {
                   ))}
                 </select>
               </label>
+              <label className="text-xs font-bold md:col-span-3">
+                Região da tabela · {salesPricePeriod}
+                <select
+                  className="form-input mt-2 w-full"
+                  value={salesPriceRegion}
+                  onChange={(event) => setSalesPriceRegion(event.target.value as SalesPriceRegion)}
+                >
+                  {salesPriceRegions.map((region) => (
+                    <option key={region.value} value={region.value}>{region.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-bold md:col-span-3">
+                Categoria de preço · {salesPricePeriod}
+                <select
+                  className="form-input mt-2 w-full"
+                  value={salesPriceTable}
+                  onChange={(event) => setSalesPriceTable(event.target.value as SalesPriceTable)}
+                >
+                  {salesPriceTables.map((table) => (
+                    <option key={table.value} value={table.value}>{table.label}</option>
+                  ))}
+                </select>
+                <span className="mt-1 block font-normal text-stone-500">
+                  Ao trocar a tabela, os preços dos itens já adicionados são recalculados.
+                </span>
+              </label>
+              {clientAgreement && (
+                <div className="md:col-span-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+                  <strong>Acordo aplicado: {clientAgreement.name}</strong>
+                  <span className="ml-1">
+                    · {clientAgreement.prices.length} preço(s) especial(is). Os valores continuam editáveis.
+                  </span>
+                </div>
+              )}
               <label className="text-xs font-bold">
                 Validade
                 <input
@@ -181,14 +573,6 @@ function Builder() {
                   className="form-input mt-2 w-full"
                   value={validDays}
                   onChange={(e) => setValidDays(Number(e.target.value) || 1)}
-                />
-              </label>
-              <label className="text-xs font-bold">
-                Vendedor
-                <input
-                  className="form-input mt-2 w-full"
-                  value={seller}
-                  onChange={(e) => setSeller(e.target.value)}
                 />
               </label>
               <label className="text-xs font-bold">
@@ -207,7 +591,7 @@ function Builder() {
                   onChange={(e) => setFreight(e.target.value)}
                 />
               </label>
-              <label className="text-xs font-bold">
+              <label className="text-xs font-bold md:col-span-3">
                 Entrega
                 <input
                   className="form-input mt-2 w-full"
@@ -215,24 +599,51 @@ function Builder() {
                   onChange={(e) => setDelivery(e.target.value)}
                 />
               </label>
-              <label className="text-xs font-bold md:col-span-2">
+              <label className="text-xs font-bold md:col-span-3">
                 Observações
                 <textarea
-                  rows={3}
+                  rows={2}
                   className="form-input mt-2 w-full"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                 />
               </label>
+              <fieldset className="md:col-span-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
+                <legend className="px-1 text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                  Representante
+                </legend>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  <label className="text-[10px] font-bold text-stone-600">
+                    Nome
+                    <input className="form-input mt-1 w-full" value={seller} onChange={(e) => setSeller(e.target.value)} />
+                  </label>
+                  <label className="text-[10px] font-bold text-stone-600">
+                    Função
+                    <input className="form-input mt-1 w-full" value={representative.role} onChange={(e) => setRepresentative((current) => ({ ...current, role: e.target.value }))} />
+                  </label>
+                  <label className="text-[10px] font-bold text-stone-600">
+                    Telefone
+                    <input type="tel" className="form-input mt-1 w-full" value={representative.phone} onChange={(e) => setRepresentative((current) => ({ ...current, phone: e.target.value }))} />
+                  </label>
+                  <label className="text-[10px] font-bold text-stone-600">
+                    E-mail
+                    <input type="email" className="form-input mt-1 w-full" value={representative.email} onChange={(e) => setRepresentative((current) => ({ ...current, email: e.target.value }))} />
+                  </label>
+                </div>
+                <p className="mt-2 text-[10px] text-stone-500">Salvo automaticamente para as próximas cotações.</p>
+              </fieldset>
             </div>
           </section>
 
-          <section className="glass-card p-5">
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(430px,1.1fr)]">
+          <section className="glass-card order-2 p-5 xl:order-1">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="font-semibold">Adicionar produtos</h2>
                 <p className="mt-1 text-xs text-stone-500">
-                  Tabela comercial Halex Istar.
+                  {clientAgreement
+                    ? `Preços do acordo ${clientAgreement.name}.`
+                    : "Tabela comercial Halex Istar. Produtos sem preço podem ser preenchidos manualmente."}
                 </p>
               </div>
             </div>
@@ -258,9 +669,15 @@ function Builder() {
                     <p className="mt-1 text-xs text-stone-500">
                       {product.code} · {product.presentation}
                     </p>
+                    <p className="mt-1 text-[11px] font-semibold text-amber-800">Caixa com {Math.max(1, product.packSize || 1)} unidade(s)</p>
+                    {product.brand && (
+                      <p className="mt-0.5 text-[11px] font-semibold text-stone-600">
+                        Marca: {product.brand}
+                      </p>
+                    )}
                   </div>
                   <p className="money-value text-sm font-bold">
-                    {money(product.price)}
+                    {money(priceForClient(product.id))}
                   </p>
                   <button
                     type="button"
@@ -275,21 +692,62 @@ function Builder() {
             </div>
           </section>
 
-          <section className="glass-card overflow-hidden">
-            <div className="border-b border-stone-100 p-5">
+          <section className="glass-card order-1 flex flex-col overflow-hidden xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:order-2">
+            <div className="flex items-center justify-between border-b border-stone-100 p-5">
               <h2 className="font-semibold">Itens da cotação</h2>
+              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800">
+                {lines.length} {lines.length === 1 ? "item" : "itens"}
+              </span>
             </div>
-            <div className="divide-y divide-stone-100">
+            <div className="min-h-0 flex-1 divide-y divide-stone-100 xl:overflow-y-auto">
+              {lines.length === 0 && (
+                <p className="p-6 text-center text-sm text-stone-500">
+                  Adicione um produto para começar a cotação. O preço poderá ser preenchido manualmente.
+                </p>
+              )}
               {lines.map((line, index) => {
                 const product = products.find(
                   (item) => item.id === line.productId,
-                )!;
+                );
+                if (!product) {
+                  return (
+                    <div
+                      key={line.productId}
+                      className="flex items-center justify-between gap-3 p-4"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-red-600">
+                          Produto indisponível
+                        </p>
+                        <p className="mt-1 text-xs text-stone-500">
+                          {line.productId} · não está na tabela de preços ativa. Remova o item para continuar.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLines((current) => current.filter((_, i) => i !== index))
+                        }
+                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600"
+                        title="Remover item"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  );
+                }
+                const packSize = Math.max(1, product.packSize || 1);
+                const unitMode = line.quantityMode === "units";
+                const enteredQuantity = unitMode ? (line.unitQuantity ?? line.quantity * packSize) : line.quantity;
+                const invalidUnits = unitMode && !isFullBoxQuantity(enteredQuantity, packSize);
+                // Prices are stored per unit; show/edit the box price in box mode.
+                const displayUnitPrice = unitMode ? line.unitPrice : line.unitPrice * packSize;
                 return (
                   <div
                     key={product.id}
-                    className="grid gap-3 p-4 md:grid-cols-[1fr_100px_150px_120px_40px] md:items-end"
+                    className="grid gap-3 p-4 sm:grid-cols-[170px_minmax(120px,1fr)_auto_40px] sm:items-end"
                   >
-                    <div>
+                    <div className="sm:col-span-4">
                       <p className="text-sm font-semibold">
                         {product.description}
                       </p>
@@ -298,30 +756,40 @@ function Builder() {
                       </p>
                     </div>
                     <label className="text-[10px] font-bold uppercase text-stone-500">
-                      Quantidade
-                      <input
-                        type="number"
-                        min="1"
-                        className="form-input mt-1 w-full"
-                        value={line.quantity}
-                        onChange={(e) =>
-                          update(index, {
-                            quantity: Number(e.target.value) || 1,
-                          })
-                        }
-                      />
+                      Quantidade · caixa com {packSize}
+                      <div className="mt-1 grid grid-cols-[82px_1fr] gap-1"><select className="form-input px-2" value={unitMode ? "units" : "boxes"} onChange={(e) => update(index, e.target.value === "units" ? { quantityMode: "units", unitQuantity: line.quantity * packSize } : { quantityMode: "boxes", unitQuantity: undefined })}><option value="boxes">Caixas</option><option value="units">Unidades</option></select><input type="number" min={unitMode ? packSize : 1} step={unitMode ? packSize : 1} className={`form-input w-full ${invalidUnits ? "border-red-400" : ""}`} value={enteredQuantity} onChange={(e) => { const amount = Math.max(0, Math.trunc(Number(e.target.value) || 0)); if (unitMode) update(index, { unitQuantity: amount, ...(amount > 0 && amount % packSize === 0 ? { quantity: amount / packSize } : {}) }); else update(index, { quantity: Math.max(1, amount) }); }} /></div>
+                      {invalidUnits && <span className="mt-1 block normal-case text-red-600">Use múltiplos de {packSize} unidades.</span>}
                     </label>
                     <label className="text-[10px] font-bold uppercase text-stone-500">
-                      Preço unitário
+                      {unitMode ? "Preço por unidade" : "Preço por caixa"}
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         className="form-input mt-1 w-full"
-                        value={line.unitPrice}
-                        onChange={(e) =>
+                        value={priceDrafts[line.productId] ?? formatQuotationPriceInput(displayUnitPrice)}
+                        onFocus={(e) => {
+                          setPriceDrafts((current) => ({
+                            ...current,
+                            [line.productId]: formatQuotationPriceInput(displayUnitPrice),
+                          }));
+                          e.currentTarget.select();
+                        }}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setPriceDrafts((current) => ({
+                            ...current,
+                            [line.productId]: value,
+                          }));
+                          const entered = parseQuotationPriceInput(value);
                           update(index, {
-                            unitPrice: Number(e.target.value) || 0,
+                            unitPrice: unitMode ? entered : entered / packSize,
+                          });
+                        }}
+                        onBlur={() =>
+                          setPriceDrafts((current) => {
+                            const next = { ...current };
+                            delete next[line.productId];
+                            return next;
                           })
                         }
                       />
@@ -331,7 +799,7 @@ function Builder() {
                         Total
                       </p>
                       <p className="money-value mt-3 text-sm font-bold">
-                        {money(line.quantity * line.unitPrice)}
+                        {invalidUnits ? "Quantidade inválida" : money(totalForLine(line))}
                       </p>
                     </div>
                     <button
@@ -359,148 +827,148 @@ function Builder() {
               </div>
             </div>
           </section>
+          </div>
         </div>
 
-        <aside className="print-document mx-auto w-full max-w-[740px] self-start bg-white p-5 shadow-sm 2xl:sticky 2xl:top-6">
-          <div
-            className={`quotation-sheet relative flex min-h-[920px] flex-col border border-stone-200 bg-white bg-[length:100%_100%] bg-no-repeat ${letterhead?.dataUrl ? "px-12 pb-12 pt-28" : "p-8"}`}
-            style={
-              letterhead?.dataUrl
-                ? { backgroundImage: `url(${letterhead.dataUrl})` }
-                : undefined
-            }
-          >
-            {!letterhead?.dataUrl && (
-              <header className="border-b-2 border-[#172033] pb-5">
-                <div className="flex items-start justify-between gap-5">
+        <aside className="print-document mx-auto min-w-0 w-full max-w-[820px] self-start space-y-5 bg-stone-100 p-5 shadow-sm 2xl:sticky 2xl:top-6">
+          {quotationPages.map((pageRows, pageIndex) => {
+            const firstPage = pageIndex === 0;
+            const lastPage = pageIndex === quotationPages.length - 1;
+            const previousRows = quotationPages
+              .slice(0, pageIndex)
+              .reduce((total, page) => total + page.length, 0);
+
+            return (
+              <article
+                key={pageIndex}
+                className={`quotation-page ${letterhead?.dataUrl ? "quotation-page-letterhead" : "quotation-page-standard"}`}
+                style={letterhead?.dataUrl
+                  ? { backgroundImage: `url(${letterhead.dataUrl})` }
+                  : undefined}
+              >
+                {!letterhead?.dataUrl && (
+                  <header className="quotation-brand-header">
+                    <div>
+                      <p className="quotation-brand-name">HALEX ISTAR</p>
+                      <p className="quotation-brand-subtitle">Indústria farmacêutica</p>
+                    </div>
+                    <div className="quotation-brand-mark">HI</div>
+                  </header>
+                )}
+
+                <div className="quotation-page-heading">
                   <div>
-                    <p className="text-2xl font-black text-[#172033]">
-                      HALEX ISTAR
-                    </p>
-                    <p className="mt-1 text-[10px] font-bold uppercase text-amber-700">
-                      Cotação comercial
-                    </p>
+                    <p className="quotation-eyebrow">Proposta comercial</p>
+                    {!firstPage && (
+                      <p className="quotation-page-context">Continuação · {client.name}</p>
+                    )}
                   </div>
-                  <div className="rounded border border-dashed border-stone-300 px-3 py-2 text-center text-[9px] text-stone-400">
-                    Papel timbrado
-                    <br />
-                    será aplicado aqui
+                  <div className="quotation-page-meta">
+                    <span>{appDate(toDateInput(issued))}</span>
+                    <span>Página {pageIndex + 1} de {quotationPages.length}</span>
                   </div>
                 </div>
-              </header>
-            )}
-            <section className="quotation-keep mt-6 grid grid-cols-3 gap-4 border-b border-stone-200 pb-5 text-xs">
-              <div>
-                <p className="text-stone-400">Cotação</p>
-                <p className="mt-1 font-bold">{quoteNumber}</p>
-              </div>
-              <div>
-                <p className="text-stone-400">Consultor comercial</p>
-                <p className="mt-1 font-bold">{seller}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-stone-400">Emissão / validade</p>
-                <p className="mt-1 font-bold">
-                  {issued.toLocaleDateString("pt-BR")} ·{" "}
-                  {valid.toLocaleDateString("pt-BR")}
-                </p>
-              </div>
-            </section>
-            <section className="quotation-keep mt-5 border-l-4 border-amber-500 bg-stone-50 p-4 text-xs">
-              <p className="text-[9px] font-bold uppercase text-stone-400">
-                Cliente
-              </p>
-              <p className="mt-1 text-sm font-bold">{client.name}</p>
-              <p className="mt-1 text-stone-500">
-                Código {client.code} · {client.contact} · {client.email}
-                <br />
-                {client.city}/{client.state} · {client.phone}
-              </p>
-            </section>
-            <table className="quotation-table mt-6 w-full text-[10px]">
-              <thead>
-                <tr>
-                  <th className="px-2 py-2 text-left">Item</th>
-                  <th className="px-2 py-2 text-left">Descrição</th>
-                  <th className="px-2 py-2 text-right">Qtd.</th>
-                  <th className="px-2 py-2 text-right">Unitário</th>
-                  <th className="px-2 py-2 text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((line, index) => {
-                  const product = products.find(
-                    (item) => item.id === line.productId,
-                  )!;
-                  return (
-                    <tr key={product.id} className="border-b border-stone-100">
-                      <td className="px-2 py-3">{index + 1}</td>
-                      <td className="px-2 py-3">
-                        <span className="font-mono text-[9px] text-stone-500">
-                          {product.code}
-                        </span>
-                        <br />
-                        <strong>{product.description}</strong>
-                        <br />
-                        <span className="text-stone-500">
-                          {product.presentation}
-                        </span>
-                      </td>
-                      <td className="px-2 py-3 text-right">{line.quantity}</td>
-                      <td className="px-2 py-3 text-right">
-                        {money(line.unitPrice)}
-                      </td>
-                      <td className="px-2 py-3 text-right font-bold">
-                        {money(line.quantity * line.unitPrice)}
-                      </td>
+
+                {firstPage ? (
+                  <section className="quotation-client quotation-keep">
+                    <div className="quotation-client-name">
+                      <span>Cliente</span>
+                      <strong>{client.name}</strong>
+                    </div>
+                    <dl>
+                      <div><dt>Código</dt><dd>{client.code}</dd></div>
+                      <div><dt>CNPJ</dt><dd>{client.cnpj ?? "Não informado"}</dd></div>
+                      <div><dt>Cidade</dt><dd>{client.city}/{client.state}</dd></div>
+                      <div><dt>Contato</dt><dd>{client.contact || "Não informado"}</dd></div>
+                      <div><dt>Telefone</dt><dd>{client.phone || "—"}</dd></div>
+                      <div><dt>E-mail</dt><dd>{client.email || "—"}</dd></div>
+                    </dl>
+                  </section>
+                ) : (
+                  <div className="quotation-continuation-client">
+                    <strong>{client.name}</strong>
+                    <span>{client.code} · {client.city}/{client.state}</span>
+                  </div>
+                )}
+
+                <table className="quotation-table">
+                  <colgroup>
+                    <col className="w-[6%]" />
+                    <col className="w-[40%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[15%]" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th className="text-left">Item</th>
+                      <th className="text-left">Produto / apresentação</th>
+                      <th className="text-left">Marca</th>
+                      <th className="text-right">Qtd.</th>
+                      <th className="text-right">Unitário</th>
+                      <th className="text-right">Total</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            <div className="quotation-keep mt-5 flex justify-end">
-              <div className="w-64 bg-[#172033] px-5 py-4 text-right text-white">
-                <p className="text-[9px] font-bold uppercase text-stone-300">
-                  Valor total da proposta
-                </p>
-                <p className="mt-1 text-xl font-black text-white">
-                  {money(subtotal)}
-                </p>
-              </div>
-            </div>
-            <section className="quotation-keep mt-7 grid grid-cols-[110px_1fr] gap-x-4 gap-y-2 border-y border-stone-200 py-4 text-[10px]">
-              <strong>Pagamento</strong>
-              <span>{payment}</span>
-              <strong>Entrega</strong>
-              <span>{delivery}</span>
-              <strong>Frete</strong>
-              <span>{freight}</span>
-              <strong>Validade</strong>
-              <span>{validDays} dias</span>
-            </section>
-            <section className="quotation-keep mt-5 text-[9px] leading-relaxed text-stone-500">
-              <p className="font-bold uppercase text-stone-700">
-                Observações comerciais
-              </p>
-              <p className="mt-2">{notes}</p>
-            </section>
-            <section className="quotation-keep mt-10 grid grid-cols-2 gap-12 text-center text-[9px] text-stone-500">
-              <div className="border-t border-stone-400 pt-2">
-                {seller}
-                <br />
-                <strong className="text-stone-700">Consultor comercial</strong>
-              </div>
-              <div className="border-t border-stone-400 pt-2">
-                Nome e assinatura
-                <br />
-                <strong className="text-stone-700">Aceite do cliente</strong>
-              </div>
-            </section>
-            <footer className="mt-auto border-t border-stone-200 pt-4 text-center text-[9px] text-stone-400">
-              Halex Istar · Proposta gerada pelo CRM comercial ·{" "}
-              {appDate(issued.toISOString().slice(0, 10))}
-            </footer>
-          </div>
+                  </thead>
+                  <tbody>
+                    {pageRows.map((row, rowIndex) => (
+                      <tr key={row.product.id}>
+                        <td className="quotation-item-number">{previousRows + rowIndex + 1}</td>
+                        <td className="quotation-product-cell">
+                          <span>{row.product.code}</span>
+                          <strong>{row.product.description}</strong>
+                          {row.product.presentation && <small>{row.product.presentation}</small>}
+                        </td>
+                        <td className="quotation-brand-cell">{row.brand || row.product.brand || "—"}</td>
+                        <td className="text-right font-semibold">{row.quantityMode === "units" ? `${row.unitQuantity} un (${row.quantity} cx)` : `${row.quantity} cx`}</td>
+                        <td className="text-right">{money(row.quantityMode === "units" ? row.unitPrice : row.unitPrice * (row.product.packSize || 1))}</td>
+                        <td className="text-right font-bold">{money(quotationLineTotal(row.quantity, row.product.packSize || 1, row.unitPrice))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {lastPage && (
+                  <div className="quotation-final-block quotation-keep">
+                    <section className="quotation-summary">
+                      <div className="quotation-grand-total">
+                        <span>Valor total da proposta</span>
+                        <strong>{money(subtotal)}</strong>
+                      </div>
+                      <dl className="quotation-conditions">
+                        <div><dt>Pagamento</dt><dd>{payment}</dd></div>
+                        <div><dt>Entrega</dt><dd>{delivery}</dd></div>
+                        <div><dt>Frete</dt><dd>{freight}</dd></div>
+                        <div><dt>Validade</dt><dd>Até {appDate(toDateInput(valid))} · {validDays} dias</dd></div>
+                      </dl>
+                    </section>
+                    <section className="quotation-representative">
+                      <div className="quotation-representative-heading">
+                        <span>Representante comercial</span>
+                        <strong>{seller}</strong>
+                      </div>
+                      <dl>
+                        <div><dt>Função</dt><dd>{representative.role}</dd></div>
+                        <div className="quotation-representative-contact">
+                          <dt>Contato</dt>
+                          <dd>{representative.phone || "Telefone não informado"}</dd>
+                          <dd>{representative.email || "E-mail não informado"}</dd>
+                        </div>
+                        <div><dt>Data da proposta</dt><dd>{appDate(toDateInput(issued))}</dd></div>
+                      </dl>
+                    </section>
+                  </div>
+                )}
+
+                {!letterhead?.dataUrl && (
+                  <footer className="quotation-footer">
+                    <span>Halex Istar Indústria Farmacêutica S/A</span>
+                    <span>Documento comercial · Página {pageIndex + 1}/{quotationPages.length}</span>
+                  </footer>
+                )}
+              </article>
+            );
+          })}
         </aside>
       </div>
     </div>

@@ -1,0 +1,10 @@
+{
+  "functions": [{
+    "source": "functions",
+    "codebase": "licensing",
+    "runtime": "nodejs22"
+  }],
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

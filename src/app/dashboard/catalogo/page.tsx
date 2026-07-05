@@ -40,13 +40,14 @@ export default function CatalogPage() {
       </div>
       <section className="glass-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="data-table min-w-[760px] w-full text-sm">
+          <table className="data-table min-w-[860px] w-full text-sm">
             <thead>
               <tr>
                 <th className="px-4 py-3 text-left">Código</th>
                 <th className="px-4 py-3 text-left">Produto</th>
                 <th className="px-4 py-3 text-left">Apresentação</th>
                 <th className="px-4 py-3 text-left">Unidade</th>
+                <th className="px-4 py-3 text-left">Embalagem</th>
                 <th className="px-4 py-3 text-right">Preço</th>
               </tr>
             </thead>
@@ -66,6 +67,9 @@ export default function CatalogPage() {
                     {item.presentation}
                   </td>
                   <td className="px-4 py-4 text-xs">{item.unit}</td>
+                  <td className="px-4 py-4 text-xs font-bold text-amber-800">
+                    Caixa com {Math.max(1, item.packSize || 1)} unidade(s)
+                  </td>
                   <td className="money-cell px-4 py-4 font-bold">
                     {money(item.price)}
                   </td>

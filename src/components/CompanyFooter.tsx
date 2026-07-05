@@ -15,9 +15,10 @@ export default function CompanyFooter({
     <footer className={`company-footer ${dark ? 'company-footer-dark' : ''} ${className}`}>
       <div className="company-footer-inner">
         <div>
-          <p className="company-footer-product">Licita Lumina</p>
+          <p className="company-footer-product">Halex Istar CRM</p>
           <p className="company-footer-legal">
-            Almeida Lumina Ltda <span aria-hidden="true">·</span> CNPJ 66.399.756/0001-63
+            Software desenvolvido por Almeida Lumina Ltda{" "}
+            <span aria-hidden="true">·</span> CNPJ 66.399.756/0001-63
           </p>
         </div>
         <div className="company-footer-contact">

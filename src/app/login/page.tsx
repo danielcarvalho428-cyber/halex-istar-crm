@@ -71,7 +71,7 @@ export default function LoginPage() {
           </p>
           <div className="mt-7 hidden border-y border-white/10 sm:grid sm:grid-cols-3 lg:mt-10">
             {[
-              [Users, 'Carteira', 'Clientes privados'],
+              [Users, 'Carteira', 'Clientes'],
               [CalendarClock, 'Inteligência', 'Ciclo de compra'],
               [FileText, 'Operação', 'Cotações automáticas'],
             ].map(([Icon, label, detail], index) => (

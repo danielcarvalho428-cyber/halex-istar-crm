@@ -7,8 +7,10 @@ import {
   BookOpen,
   Building2,
   CalendarClock,
+  ClipboardCheck,
   Database,
   FilePlus2,
+  Handshake,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -93,7 +95,7 @@ export default function DashboardLayout({
         {
           href: "/dashboard/clientes",
           icon: <Building2 size={17} />,
-          label: "Clientes privados",
+          label: "Clientes",
         },
         {
           href: "/dashboard/agenda",
@@ -120,6 +122,21 @@ export default function DashboardLayout({
           icon: <PackageSearch size={17} />,
           label: "Tabela de produtos",
         },
+        {
+          href: "/dashboard/acordos",
+          icon: <Handshake size={17} />,
+          label: "Acordos de preços",
+        },
+      ],
+    },
+    {
+      label: "Pós-venda",
+      items: [
+        {
+          href: "/dashboard/faturamento",
+          icon: <ClipboardCheck size={17} />,
+          label: "Acompanhar faturamento",
+        },
       ],
     },
     ...(isAdmin
@@ -135,7 +152,7 @@ export default function DashboardLayout({
               {
                 href: "/dashboard/configuracoes",
                 icon: <Settings size={17} />,
-                label: "Papel timbrado",
+                label: "Configurações",
               },
               {
                 href: "/dashboard/importar",
@@ -261,7 +278,7 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
       <div
         className={`${compact ? "h-8 w-8" : "h-10 w-10"} brand-mark flex items-center justify-center rounded-lg text-sm font-black`}
       >
-        LL
+        HI
       </div>
       <div>
         <p className="text-base font-semibold leading-none text-white">

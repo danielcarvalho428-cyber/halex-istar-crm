@@ -134,9 +134,9 @@ export default function PresentationPage() {
       <header className="presentation-toolbar sticky top-0 z-30 border-b border-stone-900/10 bg-[#fffaf0]/95 px-4 py-3 backdrop-blur-xl sm:px-8">
         <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="brand-mark flex h-10 w-10 items-center justify-center rounded-lg text-sm font-black">LL</div>
+            <div className="brand-mark flex h-10 w-10 items-center justify-center rounded-lg text-sm font-black">HI</div>
             <div>
-              <p className="font-semibold">Licita Lumina</p>
+              <p className="font-semibold">Desenvolvido por Lumina</p>
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Apresentação executiva</p>
             </div>
           </div>

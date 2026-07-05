@@ -1,12 +1,28 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
-import { FilePlus2, ReceiptText } from "lucide-react";
+import { FilePlus2, ReceiptText, Pencil, Trash2 } from "lucide-react";
 import { money } from "@/lib/crm-preview";
 import { useDesktopQuotations } from "@/lib/use-desktop-data";
 
 export default function QuotationsPage() {
   const quotations = useDesktopQuotations();
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta cotação?")) return;
+    if (window.halexDesktop) {
+      await window.halexDesktop.quotations.delete(id);
+      window.location.reload();
+      return;
+    }
+    const manualStored = localStorage.getItem("manualQuotations");
+    if (manualStored) {
+      const parsed: DesktopQuotation[] = JSON.parse(manualStored);
+      const updated = parsed.filter((quote) => String(quote.id) !== id);
+      localStorage.setItem("manualQuotations", JSON.stringify(updated));
+      window.location.reload();
+    }
+  };
   return (
     <div className="space-y-6">
       <header className="page-hero flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -45,6 +61,7 @@ export default function QuotationsPage() {
                   <th className="px-4 py-3 text-left">Emissão</th>
                   <th className="px-4 py-3 text-left">Status</th>
                   <th className="px-4 py-3 text-right">Valor</th>
+                  <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -68,6 +85,25 @@ export default function QuotationsPage() {
                     </td>
                     <td className="money-cell px-4 py-4 font-bold">
                       {money(Number(quote.total_value))}
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Link
+                          href={`/dashboard/cotacoes/nova?editId=${quote.id}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900"
+                          title="Editar"
+                        >
+                          <Pencil size={14} />
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete(String(quote.id))}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-500 hover:bg-red-50 hover:text-red-700"
+                          title="Excluir"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

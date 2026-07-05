@@ -1,6 +1,6 @@
 {
   "name": "halex-istar-crm",
-  "version": "0.2.0",
+  "version": "0.2.11",
   "description": "CRM offline para clientes privados e cotações Halex Istar",
   "author": "Daniel Carvalho",
   "private": true,
@@ -10,30 +10,40 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test --experimental-strip-types src/**/*.test.ts",
+    "test": "node --test --experimental-strip-types src/**/*.test.ts electron/*.test.cjs",
     "check": "npm run lint && npm run test && npm run build",
     "desktop:web": "next dev -p 3001",
-    "desktop:electron": "set ELECTRON_RUN_AS_NODE=&& electron .",
+    "desktop:electron": "electron .",
     "desktop:dev": "concurrently -k \"npm:desktop:web\" \"wait-on http://localhost:3001/dashboard && npm run desktop:electron\"",
     "desktop:prepare": "node scripts/prepare-desktop.cjs",
-    "desktop:installer": "npm run check && npm run desktop:prepare && electron-builder --win nsis"
+    "desktop:installer": "npm run check && npm run desktop:prepare && electron-builder --win nsis",
+    "desktop:installer:mac": "npm run check && npm run desktop:prepare && electron-builder --mac dmg zip --x64 --arm64 --publish never",
+    "desktop:release": "npm run check && npm run desktop:prepare && electron-builder --win nsis --publish always"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/por": "^1.0.0",
+    "electron-updater": "^6.8.9",
+    "firebase": "^12.15.0",
     "fuse.js": "^6.6.2",
     "idb": "^7.1.1",
     "lucide-react": "^1.21.0",
     "next": "^16.2.9",
+    "nodemailer": "^9.0.3",
     "papaparse": "^5.5.4",
+    "pdf-parse": "^2.4.5",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-window": "^1.8.8",
     "sql.js": "^1.14.1",
+    "tesseract.js": "^7.0.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.1",
     "@types/node": "^20",
+    "@types/nodemailer": "^7.0.11",
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -44,6 +54,7 @@
     "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "^16.2.9",
+    "firebase-tools": "^15.22.4",
     "tailwindcss": "^4.3.1",
     "typescript": "^5",
     "wait-on": "^9.0.10"
@@ -71,13 +82,34 @@
     ],
     "win": {
       "target": "nsis",
-      "artifactName": "Halex-Istar-CRM-Setup-${version}.${ext}"
+      "artifactName": "Halex-Istar-CRM-Setup-${version}.${ext}",
+      "publish": {
+        "provider": "github",
+        "owner": "danielcarvalho428-cyber",
+        "repo": "halex-istar-crm-releases",
+        "releaseType": "release"
+      }
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.business",
+      "artifactName": "Halex-Istar-CRM-${version}-${arch}.${ext}",
+      "identity": null
+    },
+    "dmg": {
+      "title": "Halex Istar CRM ${version}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "danielcarvalho428-cyber",
+      "repo": "halex-istar-crm-releases",
+      "releaseType": "release"
     }
   }
 }

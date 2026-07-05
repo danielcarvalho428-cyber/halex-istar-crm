@@ -12,7 +12,7 @@ export default function GlobalError({
         <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
           <section style={{ maxWidth: 520, textAlign: 'center' }}>
             <p style={{ color: '#bb7300', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-              Licita Lumina
+              Halex Istar CRM
             </p>
             <h1>Algo deu errado</h1>
             <p>Recarregue esta área. Nenhuma alteração foi concluída durante o erro.</p>

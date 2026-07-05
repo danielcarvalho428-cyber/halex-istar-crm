@@ -135,13 +135,14 @@ textarea {
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--card-border);
   border-radius: 10px;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s, box-shadow 0.25s;
   box-shadow:
     0 1px 0 oklch(1 0 0 / 0.9) inset,
     0 26px 80px -64px oklch(0.18 0.012 60 / 0.48);
 }
 
 .glass-card:hover {
+  transform: translateY(-2px) scale(1.008);
   border-color: oklch(0.68 0.13 72 / 0.3);
   box-shadow: 0 32px 90px -66px oklch(0.5 0.12 67 / 0.48);
 }
@@ -298,12 +299,14 @@ textarea {
   box-shadow:
     inset 0 1px 0 oklch(1 0 0 / 0.09),
     0 16px 34px -24px oklch(0.35 0.12 68 / 0.8);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
 .brand-button:hover {
   filter: brightness(1.12);
   border-color: oklch(0.8 0.14 78 / 0.7);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px -10px oklch(0.35 0.12 68 / 0.5);
 }
 
 .brand-secondary {
@@ -311,12 +314,15 @@ textarea {
   border: 1px solid oklch(0.18 0.012 60 / 0.14);
   color: var(--ink);
   box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.9);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s, border-color 0.2s, box-shadow 0.2s, color 0.2s;
 }
 
 .brand-secondary:hover {
   background: var(--gold-light);
   border-color: oklch(0.62 0.14 68 / 0.28);
   color: var(--ink);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px -8px rgba(0, 0, 0, 0.15);
 }
 
 .lumina-kicker {
@@ -1415,9 +1421,322 @@ label[aria-disabled="true"] {
   background: #fff8ec;
 }
 
-.quotation-sheet > :not(.letterhead-background) {
+.quotation-page {
   position: relative;
-  z-index: 1;
+  display: flex;
+  width: 100%;
+  aspect-ratio: 210 / 297;
+  box-sizing: border-box;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #d8dee8;
+  background-color: #fff;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  color: #172033;
+  font-family: Arial, Helvetica, sans-serif;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 8%);
+}
+
+.quotation-page-standard {
+  padding: 5.5% 5.5% 7%;
+}
+
+.quotation-page-letterhead {
+  padding: 14% 5% 11%;
+}
+
+.quotation-brand-header,
+.quotation-page-heading,
+.quotation-continuation-client,
+.quotation-grand-total,
+.quotation-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.quotation-brand-header {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 3px solid #172033;
+}
+
+.quotation-brand-name {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+}
+
+.quotation-brand-subtitle,
+.quotation-eyebrow {
+  color: #64748b;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.quotation-brand-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  background: #172033;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.quotation-page-heading {
+  gap: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.quotation-page-context {
+  margin-top: 2px;
+  color: #172033;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.quotation-page-meta {
+  display: grid;
+  flex: none;
+  gap: 2px;
+  color: #64748b;
+  font-size: 8px;
+  text-align: right;
+}
+
+.quotation-client {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 2fr);
+  gap: 18px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-left: 3px solid #172033;
+  background: #f5f7fa;
+}
+
+.quotation-client-name span {
+  display: block;
+  color: #64748b;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.quotation-client-name strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.quotation-client dl,
+.quotation-conditions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+.quotation-client dt,
+.quotation-conditions dt {
+  color: #64748b;
+  font-size: 7px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.quotation-client dd,
+.quotation-conditions dd {
+  margin-top: 1px;
+  overflow-wrap: anywhere;
+  color: #334155;
+  font-size: 8px;
+  line-height: 1.25;
+}
+
+.quotation-continuation-client {
+  margin-top: 8px;
+  padding: 6px 9px;
+  background: #f5f7fa;
+  font-size: 8px;
+}
+
+.quotation-continuation-client span {
+  color: #64748b;
+}
+
+.quotation-table {
+  width: 100%;
+  margin-top: 10px;
+  table-layout: fixed;
+  border-collapse: collapse !important;
+  font-size: 8px;
+  line-height: 1.2;
+}
+
+.quotation-table thead {
+  background: #172033;
+  color: #fff;
+}
+
+.quotation-table th {
+  padding: 6px 7px;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.quotation-table td {
+  padding: 6px 7px;
+  vertical-align: top;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.quotation-table tbody tr:nth-child(even) {
+  background: rgb(248 250 252 / 75%);
+}
+
+.quotation-item-number {
+  color: #64748b;
+}
+
+.quotation-product-cell span,
+.quotation-product-cell strong,
+.quotation-product-cell small {
+  display: block;
+}
+
+.quotation-product-cell span {
+  margin-bottom: 1px;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 7px;
+}
+
+.quotation-product-cell strong {
+  color: #172033;
+  font-size: 8px;
+  line-height: 1.2;
+}
+
+.quotation-product-cell small {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 7px;
+  line-height: 1.2;
+}
+
+.quotation-brand-cell {
+  color: #334155;
+  font-size: 8px;
+  line-height: 1.2;
+}
+
+.quotation-summary {
+  margin-top: 10px;
+  border-top: 2px solid #172033;
+}
+
+.quotation-final-block {
+  padding-top: 10px;
+}
+
+.quotation-final-block .quotation-summary {
+  margin-top: 0;
+}
+
+.quotation-grand-total {
+  padding: 7px 9px;
+  background: #eef2f6;
+}
+
+.quotation-grand-total span {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.quotation-grand-total strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.quotation-conditions {
+  padding: 9px;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.quotation-representative {
+  margin-top: 7px;
+  border: 1px solid #cbd5e1;
+  border-left: 3px solid #172033;
+  background: #fff;
+}
+
+.quotation-representative-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 9px;
+  background: #f5f7fa;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.quotation-representative-heading span,
+.quotation-representative dt {
+  display: block;
+  color: #64748b;
+  font-size: 7px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.quotation-representative-heading strong {
+  color: #172033;
+  font-size: 9px;
+  text-align: right;
+}
+
+.quotation-representative dd {
+  margin-top: 1px;
+  color: #334155;
+  font-size: 7px;
+  line-height: 1.25;
+}
+
+.quotation-representative dl {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 0.8fr;
+  gap: 12px;
+  min-width: 0;
+  padding: 7px 9px 8px;
+}
+
+.quotation-representative dd {
+  overflow-wrap: anywhere;
+}
+
+.quotation-footer {
+  position: absolute;
+  right: 5.5%;
+  bottom: 3.5%;
+  left: 5.5%;
+  padding-top: 7px;
+  border-top: 1px solid #e2e8f0;
+  color: #94a3b8;
+  font-size: 7px;
 }
 
 @media (max-width: 767px) {
@@ -1443,6 +1762,18 @@ label[aria-disabled="true"] {
 }
 
 @media (max-width: 639px) {
+  .company-footer,
+  .company-footer-inner,
+  .company-footer-contact {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .company-footer-contact a {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
   .company-footer-inner {
     align-items: flex-start;
     flex-direction: column;
@@ -1457,7 +1788,7 @@ label[aria-disabled="true"] {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 10mm;
+    margin: 0;
   }
 
   body {
@@ -1520,13 +1851,180 @@ label[aria-disabled="true"] {
     -webkit-print-color-adjust: exact;
   }
 
-  body:has(.print-document) .quotation-sheet {
-    min-height: 277mm;
+  body:has(.print-document) .quotation-page {
+    width: 210mm !important;
+    height: 297mm !important;
+    min-height: 297mm !important;
+    max-height: 297mm !important;
+    aspect-ratio: auto;
+    margin: 0 !important;
+    overflow: hidden !important;
     border: 0 !important;
+    box-shadow: none !important;
+    break-after: page;
+    page-break-after: always;
   }
 
-  body:has(.print-document) .quotation-table thead {
-    display: table-header-group;
+  body:has(.print-document) .quotation-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  body:has(.print-document) .quotation-page + .quotation-page {
+    margin-top: 0 !important;
+  }
+
+  body:has(.print-document) .quotation-page-standard {
+    padding: 14mm 12mm 17mm !important;
+  }
+
+  body:has(.print-document) .quotation-page-letterhead {
+    padding: 29mm 10mm 24mm !important;
+  }
+
+  body:has(.print-document) .quotation-brand-header {
+    margin-bottom: 4mm;
+    padding-bottom: 3mm;
+  }
+
+  body:has(.print-document) .quotation-brand-name {
+    font-size: 18pt;
+  }
+
+  body:has(.print-document) .quotation-brand-subtitle,
+  body:has(.print-document) .quotation-eyebrow {
+    font-size: 6.5pt;
+  }
+
+  body:has(.print-document) .quotation-page-heading {
+    padding-bottom: 2mm;
+  }
+
+  body:has(.print-document) .quotation-page-context {
+    font-size: 8pt;
+  }
+
+  body:has(.print-document) .quotation-page-meta {
+    font-size: 6.5pt;
+  }
+
+  body:has(.print-document) .quotation-client {
+    gap: 5mm;
+    margin-top: 2.5mm;
+    padding: 2.5mm 3mm;
+  }
+
+  body:has(.print-document) .quotation-client-name span,
+  body:has(.print-document) .quotation-client dt,
+  body:has(.print-document) .quotation-conditions dt {
+    font-size: 6pt;
+  }
+
+  body:has(.print-document) .quotation-client-name strong {
+    font-size: 9pt;
+  }
+
+  body:has(.print-document) .quotation-client dl,
+  body:has(.print-document) .quotation-conditions {
+    gap: 1.5mm 3mm;
+  }
+
+  body:has(.print-document) .quotation-client dd,
+  body:has(.print-document) .quotation-conditions dd {
+    font-size: 6.5pt;
+  }
+
+  body:has(.print-document) .quotation-continuation-client {
+    margin-top: 2mm;
+    padding: 1.5mm 2.5mm;
+    font-size: 6.5pt;
+  }
+
+  body:has(.print-document) .quotation-table {
+    margin-top: 2.5mm;
+    font-size: 6.6pt;
+  }
+
+  body:has(.print-document) .quotation-table th {
+    padding: 1.5mm 1.8mm;
+    font-size: 6pt;
+  }
+
+  body:has(.print-document) .quotation-table td {
+    padding: 1.5mm 1.8mm;
+  }
+
+  body:has(.print-document) .quotation-product-cell span,
+  body:has(.print-document) .quotation-product-cell small {
+    font-size: 6pt;
+  }
+
+  body:has(.print-document) .quotation-product-cell strong {
+    font-size: 6.6pt;
+  }
+
+  body:has(.print-document) .quotation-brand-cell {
+    font-size: 6.6pt;
+  }
+
+  body:has(.print-document) .quotation-summary {
+    margin-top: 2.5mm;
+  }
+
+  body:has(.print-document) .quotation-final-block {
+    padding-top: 2.5mm;
+  }
+
+  body:has(.print-document) .quotation-final-block .quotation-summary {
+    margin-top: 0;
+  }
+
+  body:has(.print-document) .quotation-grand-total {
+    padding: 2mm 2.5mm;
+  }
+
+  body:has(.print-document) .quotation-grand-total span {
+    font-size: 6.5pt;
+  }
+
+  body:has(.print-document) .quotation-grand-total strong {
+    font-size: 10pt;
+  }
+
+  body:has(.print-document) .quotation-conditions {
+    padding: 2.5mm;
+  }
+
+  body:has(.print-document) .quotation-representative {
+    margin-top: 2mm;
+  }
+
+  body:has(.print-document) .quotation-representative-heading {
+    gap: 3mm;
+    padding: 1.5mm 2.5mm;
+  }
+
+  body:has(.print-document) .quotation-representative dl {
+    gap: 3mm;
+    padding: 2mm 2.5mm;
+  }
+
+  body:has(.print-document) .quotation-representative-heading span,
+  body:has(.print-document) .quotation-representative dt,
+  body:has(.print-document) .quotation-representative dd {
+    font-size: 6pt;
+  }
+
+  body:has(.print-document) .quotation-representative-heading strong {
+    font-size: 7.5pt;
+  }
+
+  body:has(.print-document) .quotation-footer {
+    right: 12mm;
+    bottom: 7mm;
+    left: 12mm;
+    padding-top: 2mm;
+    font-size: 6pt;
   }
 
   body:has(.print-document) .quotation-table tr,

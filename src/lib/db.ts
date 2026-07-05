@@ -291,6 +291,18 @@ export const db = {
   },
 
   async getAppData(): Promise<AppDataBundle> {
+    if (typeof window !== 'undefined' && window.halexDesktop) {
+      seedMockDataIfEmpty();
+      await storage.migrateFromLocalStorage(KEYS).catch(() => {});
+      const [licitacoes, itens, empenhos, empenhoItens] = await Promise.all([
+        storage.getAllLicitacoes(),
+        storage.getAllItens(),
+        storage.getAllEmpenhos(),
+        storage.getAllEmpenhoItens(),
+      ]);
+      return { licitacoes, itens, empenhos, empenhoItens };
+    }
+
     if (isSupabaseConfigured) {
       return sharedDataRequest<AppDataBundle>('getAppData');
     }

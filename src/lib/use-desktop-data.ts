@@ -1,8 +1,18 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import type { CrmClient, CrmProduct } from "./crm-preview";
 import { previewClients, previewProducts } from "./crm-preview";
+
+function readJsonArray<T>(key: string): T[] {
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 function clientFromRow(row: DesktopClient): CrmClient {
   const next = String(row.next_purchase || "");
@@ -28,6 +38,12 @@ function clientFromRow(row: DesktopClient): CrmClient {
         : next && next <= soon.toISOString().slice(0, 10)
           ? "Contato próximo"
           : "Em ciclo",
+    clientType:
+      row.client_type === "hospital" || row.client_type === "distribuidor"
+        ? row.client_type
+        : undefined,
+    cnpj: row.cnpj || row.document || undefined,
+    carteira: row.carteira || undefined,
   };
 }
 
@@ -37,19 +53,36 @@ function productFromRow(row: DesktopProduct): CrmProduct {
     code: String(row.code || ""),
     description: String(row.description || ""),
     presentation: String(row.presentation || ""),
+    brand: String(row.brand || "Halex Istar"),
     unit: String(row.unit || "UN"),
     price: Number(row.price || 0),
+    priceHospital: Number(row.price_hospital || row.price || 0),
+    priceDistribuidor: Number(row.price_distribuidor || row.price || 0),
+    packSize: Math.max(1, Number(row.pack_size || 1)),
   };
 }
 
 export function useDesktopClients() {
   const [clients, setClients] = useState(previewClients);
+
   useEffect(() => {
-    window.halexDesktop?.clients
-      .list()
-      .then((rows) => setClients(rows.map(clientFromRow)))
-      .catch(() => {});
+    const manualClients = readJsonArray<CrmClient>("manualClients");
+
+    if (window.halexDesktop?.clients) {
+      window.halexDesktop.clients
+        .list()
+        .then((rows) => {
+          const desktopClients = rows.map(clientFromRow);
+          setClients([...manualClients, ...desktopClients]);
+        })
+        .catch(() => {
+          setClients([...manualClients, ...previewClients]);
+        });
+    } else {
+      queueMicrotask(() => setClients([...manualClients, ...previewClients]));
+    }
   }, []);
+
   return clients;
 }
 
@@ -67,10 +100,16 @@ export function useDesktopProducts() {
 export function useDesktopQuotations() {
   const [quotations, setQuotations] = useState<DesktopQuotation[]>([]);
   useEffect(() => {
-    window.halexDesktop?.quotations
-      .list()
-      .then(setQuotations)
-      .catch(() => {});
+    const manualQuotations = readJsonArray<DesktopQuotation>("manualQuotations");
+
+    if (window.halexDesktop?.quotations) {
+      window.halexDesktop.quotations
+        .list()
+        .then((rows) => setQuotations([...manualQuotations, ...rows]))
+        .catch(() => setQuotations(manualQuotations));
+    } else {
+      queueMicrotask(() => setQuotations(manualQuotations));
+    }
   }, []);
   return quotations;
 }
@@ -88,4 +127,26 @@ export function useDesktopLetterhead() {
       .catch(() => {});
   }, []);
   return letterhead;
+}
+
+export function useDesktopAgreements() {
+  const [agreements, setAgreements] = useState<DesktopAgreementGroup[]>([]);
+  useEffect(() => {
+    window.halexDesktop?.agreements
+      .list()
+      .then(setAgreements)
+      .catch(() => {});
+  }, []);
+  return agreements;
+}
+
+export function useDesktopSalesPriceTable() {
+  const [table, setTable] = useState<DesktopSalesPriceTable | null>(null);
+  useEffect(() => {
+    window.halexDesktop?.imports
+      .activeSalesPriceTable()
+      .then(setTable)
+      .catch(() => {});
+  }, []);
+  return table;
 }

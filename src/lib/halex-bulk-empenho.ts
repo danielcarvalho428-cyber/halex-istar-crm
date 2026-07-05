@@ -20,6 +20,7 @@ export type HalexInvoice = {
   ordemVenda: string;
   codigoCliente: string;
   nomeCliente: string;
+  pedidoCliente?: string;
   items: HalexInvoiceItem[];
 };
 
