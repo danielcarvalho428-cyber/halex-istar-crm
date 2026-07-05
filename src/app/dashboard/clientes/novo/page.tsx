@@ -97,7 +97,8 @@ function ClientForm() {
       contact: form.contact,
       phone: form.phone,
       email: form.email,
-      lastPurchase: String(existing?.last_purchase || new Date().toISOString().slice(0, 10)),
+      // A client registration or quotation is not evidence of a completed sale.
+      lastPurchase: String(existing?.last_purchase || ""),
       averageCycleDays: Number(existing?.average_cycle_days || 0),
       nextPurchase: String(existing?.next_purchase || ""),
       total12m: Number(existing?.total_12m || 0),

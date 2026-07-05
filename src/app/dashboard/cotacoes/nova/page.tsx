@@ -125,6 +125,14 @@ function Builder() {
   // UNIQUE quote_number.
   const [savedId, setSavedId] = useState<string | null>(editId);
 
+  useEffect(() => {
+    if (editId || savedId) return;
+    const syncWithSystemClock = () => setIssued(new Date());
+    syncWithSystemClock();
+    const timer = window.setInterval(syncWithSystemClock, 60_000);
+    return () => window.clearInterval(timer);
+  }, [editId, savedId]);
+
   // These refs let the repricing effects tell a genuine user change (pick a new
   // client/table) apart from a programmatic load of a stored quote. loadQuotation
   // seeds them with the loaded values so it does NOT trigger a reprice.
@@ -335,7 +343,7 @@ function Builder() {
     return quotationLineTotal(line.quantity, product.packSize || 1, line.unitPrice);
   };
   const subtotal = lines.reduce((sum, line) => sum + totalForLine(line), 0);
-  const valid = new Date();
+  const valid = new Date(issued);
   valid.setDate(valid.getDate() + validDays);
   // Memoized so typing in the catalog search (or any other field) doesn't
   // re-run pagination over the quote lines on every keystroke.

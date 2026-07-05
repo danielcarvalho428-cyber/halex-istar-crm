@@ -37,6 +37,25 @@ function padDatePart(value: number) {
   return String(value).padStart(2, '0');
 }
 
+export function localIsoDate(date = new Date()) {
+  return [
+    date.getFullYear(),
+    padDatePart(date.getMonth() + 1),
+    padDatePart(date.getDate()),
+  ].join('-');
+}
+
+export function isoDateInTimeZone(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
 export function toIsoDate(value?: string | null) {
   const date = parseAppDate(value);
   if (!date) return '';
@@ -71,10 +90,5 @@ export function formatDateInputValue(value: string) {
 }
 
 export function todayIsoDate() {
-  const today = new Date();
-  return [
-    today.getFullYear(),
-    padDatePart(today.getMonth() + 1),
-    padDatePart(today.getDate()),
-  ].join('-');
+  return localIsoDate();
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { CrmClient, CrmProduct } from "./crm-preview";
 import { previewClients, previewProducts } from "./crm-preview";
+import { localIsoDate } from "./date";
 
 function readJsonArray<T>(key: string): T[] {
   try {
@@ -16,7 +17,7 @@ function readJsonArray<T>(key: string): T[] {
 
 function clientFromRow(row: DesktopClient): CrmClient {
   const next = String(row.next_purchase || "");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localIsoDate();
   const soon = new Date();
   soon.setDate(soon.getDate() + 30);
   return {
@@ -35,7 +36,7 @@ function clientFromRow(row: DesktopClient): CrmClient {
     status:
       next && next <= today
         ? "Comprar agora"
-        : next && next <= soon.toISOString().slice(0, 10)
+        : next && next <= localIsoDate(soon)
           ? "Contato próximo"
           : "Em ciclo",
     clientType:
@@ -63,7 +64,7 @@ function productFromRow(row: DesktopProduct): CrmProduct {
 }
 
 export function useDesktopClients() {
-  const [clients, setClients] = useState(previewClients);
+  const [clients, setClients] = useState<CrmClient[]>([]);
 
   useEffect(() => {
     const manualClients = readJsonArray<CrmClient>("manualClients");
@@ -87,12 +88,16 @@ export function useDesktopClients() {
 }
 
 export function useDesktopProducts() {
-  const [products, setProducts] = useState(previewProducts);
+  const [products, setProducts] = useState<CrmProduct[]>([]);
   useEffect(() => {
-    window.halexDesktop?.products
-      .list()
-      .then((rows) => setProducts(rows.map(productFromRow)))
-      .catch(() => {});
+    if (window.halexDesktop?.products) {
+      window.halexDesktop.products
+        .list()
+        .then((rows) => setProducts(rows.map(productFromRow)))
+        .catch(() => setProducts([]));
+    } else {
+      queueMicrotask(() => setProducts(previewProducts));
+    }
   }, []);
   return products;
 }

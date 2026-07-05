@@ -8,7 +8,7 @@ const { LocalDatabase } = require("./database.cjs");
 
 async function withDatabase(run) {
   const file = path.join(os.tmpdir(), `halex-test-${randomUUID()}.sqlite`);
-  const database = new LocalDatabase(file);
+  const database = new LocalDatabase(file, { seedDemoData: true });
   await database.open();
   try {
     await run(database);
@@ -16,6 +16,42 @@ async function withDatabase(run) {
     if (fs.existsSync(file)) fs.unlinkSync(file);
   }
 }
+
+test("a production database starts without demonstration clients or purchases", async () => {
+  const file = path.join(os.tmpdir(), `halex-empty-${randomUUID()}.sqlite`);
+  const database = new LocalDatabase(file);
+  await database.open();
+  try {
+    assert.deepEqual(database.listClients(), []);
+    assert.deepEqual(database.listQuotations(), []);
+  } finally {
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  }
+});
+
+test("repairs false purchase dates created by the old manual-client form", async () => {
+  await withDatabase((database) => {
+    database.saveClient({
+      id: "manual-123",
+      code: "MANUAL1",
+      name: "Cliente manual",
+      last_purchase: "2026-07-02",
+      created_at: "2026-07-02T13:55:39.217Z",
+    });
+    database.cleanupFalseManualPurchaseDates();
+    assert.equal(database.getClient("manual-123").last_purchase, null);
+
+    database.saveClient({
+      id: "imported-123",
+      code: "IMPORT1",
+      name: "Cliente importado",
+      last_purchase: "2026-07-02",
+      created_at: "2026-07-02T13:55:39.217Z",
+    });
+    database.cleanupFalseManualPurchaseDates();
+    assert.equal(database.getClient("imported-123").last_purchase, "2026-07-02");
+  });
+});
 
 test("imports a product catalog without prices", async () => {
   await withDatabase((database) => {

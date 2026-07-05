@@ -305,6 +305,7 @@ function SidebarFooter({
 }) {
   return (
     <div className="relative z-10 mt-auto flex flex-col gap-4 border-t border-white/8 pt-5">
+      <LocalClock />
       <div className="border-l border-amber-400/60 pl-3">
         <p className="readable-name text-xs font-semibold text-white">
           {displayName || "Usuário"}
@@ -321,6 +322,31 @@ function SidebarFooter({
         <LogOut size={12} />
         <span>Sair do Painel</span>
       </button>
+    </div>
+  );
+}
+
+function LocalClock() {
+  const [now, setNow] = React.useState<Date | null>(null);
+
+  React.useEffect(() => {
+    const update = () => setNow(new Date());
+    update();
+    const timer = window.setInterval(update, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  if (!now) return null;
+
+  return (
+    <div className="flex items-center gap-2 text-stone-400" title="Data e hora deste computador">
+      <CalendarClock size={14} aria-hidden="true" />
+      <time dateTime={now.toISOString()} className="text-[10px] font-medium">
+        {new Intl.DateTimeFormat("pt-BR", {
+          dateStyle: "short",
+          timeStyle: "short",
+        }).format(now)}
+      </time>
     </div>
   );
 }

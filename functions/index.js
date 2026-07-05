@@ -51,7 +51,9 @@ function licensePayload(id, data, deviceId) {
     graceUntil: expiresAt + graceDays * 86400000,
     maxDevices: Number(data.maxDevices || 2),
     issuedAt: now,
-    validUntil: now + 36 * 60 * 60 * 1000,
+    // This signed value is the offline trust boundary. The client must never
+    // rely on an editable localStorage timestamp to extend this window.
+    validUntil: Math.min(expiresAt, now + 7 * 24 * 60 * 60 * 1000),
   };
 }
 

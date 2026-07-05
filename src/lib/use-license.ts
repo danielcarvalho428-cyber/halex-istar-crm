@@ -83,7 +83,10 @@ async function verifyLicenseToken(token: string): Promise<ServerLicense | null> 
 
 function structurallyActive(license: ServerLicense, lastChecked: number) {
   const now = Date.now();
-  return license.status === "active" && license.expiresAt > now && now - lastChecked <= OFFLINE_GRACE_MS;
+  return license.status === "active" &&
+    license.expiresAt > now &&
+    license.validUntil > now &&
+    now - lastChecked <= OFFLINE_GRACE_MS;
 }
 
 // Offline reuse must clear the signature check; the fresh online response is
@@ -91,7 +94,9 @@ function structurallyActive(license: ServerLicense, lastChecked: number) {
 async function usableOffline(stored: StoredLicense) {
   const payload = await verifyLicenseToken(stored.token);
   if (!payload || payload.deviceId !== deviceId()) return false;
-  return structurallyActive(payload, stored.lastChecked);
+  // validUntil is signed by the backend, so changing lastChecked in
+  // localStorage cannot keep an offline license alive indefinitely.
+  return structurallyActive(payload, Math.min(stored.lastChecked, payload.validUntil));
 }
 
 async function callLicenseFunction(name: "activateLicense" | "validateLicense", data: Record<string, unknown>) {

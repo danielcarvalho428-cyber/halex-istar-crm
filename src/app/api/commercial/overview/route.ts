@@ -2,6 +2,9 @@ import { cookies } from 'next/headers';
 import { AUTH_COOKIE_NAME, getSessionFromToken } from '@/lib/auth';
 import { privateJson } from '@/lib/http';
 import { createSupabaseAdminClient, isSupabaseAdminConfigured } from '@/lib/supabase-admin';
+import { isoDateInTimeZone } from '@/lib/date';
+
+const BUSINESS_TIME_ZONE = 'America/Sao_Paulo';
 
 export async function GET() {
   const cookieStore = await cookies();
@@ -10,7 +13,7 @@ export async function GET() {
   if (!isSupabaseAdminConfigured()) return privateJson({ ok: false, message: 'Database unavailable.' }, { status: 503 });
 
   const supabase = createSupabaseAdminClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = isoDateInTimeZone(new Date(), BUSINESS_TIME_ZONE);
   const [tasks, audits, latestTender, latestOpportunity] = await Promise.all([
     supabase
       .from('commercial_tasks')

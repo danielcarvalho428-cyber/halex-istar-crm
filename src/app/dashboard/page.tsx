@@ -4,12 +4,13 @@ import Link from 'next/link';
 import { ArrowRight, Building2, CalendarClock, FilePlus2, ReceiptText, TrendingUp } from 'lucide-react';
 import { appDate, money } from '@/lib/crm-preview';
 import { useDesktopClients, useDesktopQuotations } from '@/lib/use-desktop-data';
+import { localIsoDate } from '@/lib/date';
 
 export default function DashboardPage() {
   const clients = useDesktopClients();
   const quotations = useDesktopQuotations();
   const immediate = clients.filter((client) => client.status === 'Comprar agora');
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = localIsoDate().slice(0, 7);
   const monthlyQuotes = quotations.filter((quote) =>
     String(quote.issued_at ?? '').startsWith(currentMonth),
   ).length;

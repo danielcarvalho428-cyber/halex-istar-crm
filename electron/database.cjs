@@ -152,9 +152,10 @@ const seedProducts = [
 ];
 
 class LocalDatabase {
-  constructor(filePath) {
+  constructor(filePath, { seedDemoData = false } = {}) {
     this.filePath = filePath;
     this.db = null;
+    this.seedDemoData = seedDemoData;
   }
 
   async open() {
@@ -180,7 +181,8 @@ class LocalDatabase {
     this.ensureColumn("quotations", "sales_price_region", "TEXT");
     this.ensureColumn("agreement_groups", "price_table_name", "TEXT");
     this.ensureColumn("agreement_groups", "price_table_imported_at", "TEXT");
-    this.seed();
+    this.cleanupFalseManualPurchaseDates();
+    if (this.seedDemoData) this.seed();
     this.persist();
   }
 
@@ -217,6 +219,19 @@ class LocalDatabase {
     if (!columns.some((value) => value.name === column)) {
       this.db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
     }
+  }
+
+  cleanupFalseManualPurchaseDates() {
+    // Versions through 0.2.12 stamped every manually registered client with
+    // its creation day as a purchase. Only clear that exact generated pattern;
+    // imported and explicitly recorded purchase history remains untouched.
+    this.db.run(`UPDATE clients
+      SET last_purchase = NULL, updated_at = updated_at
+      WHERE id LIKE 'manual-%'
+        AND last_purchase = substr(created_at, 1, 10)
+        AND NOT EXISTS (
+          SELECT 1 FROM purchases WHERE purchases.client_id = clients.id
+        )`);
   }
 
   run(sql, params = []) {
