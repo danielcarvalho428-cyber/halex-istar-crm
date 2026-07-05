@@ -97,10 +97,12 @@
       ],
       "category": "public.app-category.business",
       "artifactName": "Halex-Istar-CRM-${version}-${arch}.${ext}",
-      "identity": null
+      "identity": null,
+      "hardenedRuntime": false
     },
     "dmg": {
-      "title": "Halex Istar CRM ${version}"
+      "title": "Halex Istar CRM ${version}",
+      "sign": false
     },
     "nsis": {
       "oneClick": false,
