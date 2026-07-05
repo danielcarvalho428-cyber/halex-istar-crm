@@ -1,6 +1,6 @@
 {
   "name": "halex-istar-crm",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "description": "CRM offline para clientes privados e cotações Halex Istar",
   "author": "Daniel Carvalho",
   "private": true,
@@ -91,7 +91,10 @@
       }
     },
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.business",
       "artifactName": "Halex-Istar-CRM-${version}-${arch}.${ext}",
       "identity": null
