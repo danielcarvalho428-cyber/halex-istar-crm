@@ -4,11 +4,9 @@ import {
   createSessionToken,
   isAuthConfigured,
   validateCredentials,
-  verifyPasswordHash,
 } from '@/lib/auth';
 import { privateJson } from '@/lib/http';
 import { checkRateLimit } from '@/lib/rate-limit';
-import { createSupabaseAdminClient, isSupabaseAdminConfigured } from '@/lib/supabase-admin';
 import type { AccountRole } from '@/types';
 
 function getClientKey(request: Request) {
@@ -56,34 +54,6 @@ export async function POST(request: Request) {
     displayName?: string | null;
     company?: string | null;
   } | null = null;
-
-  if (isSupabaseAdminConfigured()) {
-    const supabase = createSupabaseAdminClient();
-    const { data: account, error } = await supabase
-      .from('app_accounts')
-      .select('id, username, password_hash, role, display_name, company, active')
-      .eq('username', username.toLowerCase())
-      .maybeSingle();
-
-    if (error && error.code !== '42P01' && error.code !== 'PGRST205') {
-      console.error(error);
-    }
-
-    if (account?.active && await verifyPasswordHash(password, account.password_hash)) {
-      session = {
-        username: account.username,
-        role: account.role === 'admin' ? 'admin' : 'viewer',
-        accountId: account.id,
-        displayName: account.display_name,
-        company: account.company,
-      };
-
-      await supabase
-        .from('app_accounts')
-        .update({ last_login_at: new Date().toISOString() })
-        .eq('id', account.id);
-    }
-  }
 
   if (!session && validateCredentials(username, password)) {
     session = {

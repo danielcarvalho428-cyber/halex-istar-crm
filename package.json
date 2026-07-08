@@ -1,6 +1,7 @@
 {
   "name": "halex-istar-crm",
-  "version": "0.2.13",
+  "version": "0.2.15",
+  "type": "module",
   "description": "CRM offline para clientes privados e cotações Halex Istar",
   "author": "Daniel Carvalho",
   "private": true,
@@ -21,7 +22,6 @@
     "desktop:release": "npm run check && npm run desktop:prepare && electron-builder --win nsis --publish always"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.108.2",
     "@tesseract.js-data/eng": "^1.0.0",
     "@tesseract.js-data/por": "^1.0.0",
     "electron-updater": "^6.8.9",
@@ -54,10 +54,14 @@
     "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "^16.2.9",
-    "firebase-tools": "^15.22.4",
     "tailwindcss": "^4.3.1",
     "typescript": "^5",
     "wait-on": "^9.0.10"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.16"
+    }
   },
   "build": {
     "appId": "br.com.halexistar.crm",
@@ -82,6 +86,7 @@
     ],
     "win": {
       "target": "nsis",
+      "icon": "src/app/favicon.ico",
       "artifactName": "Halex-Istar-CRM-Setup-${version}.${ext}",
       "publish": {
         "provider": "github",

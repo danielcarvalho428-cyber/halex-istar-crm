@@ -8,18 +8,11 @@ import {
   ClipboardList,
   FileSpreadsheet,
   History,
-  UploadCloud,
 } from 'lucide-react';
 import { db } from '@/lib/db';
 import type { AuditEvent } from '@/types';
 
 const importCards = [
-  {
-    href: '/dashboard/import/halex-powerbi',
-    title: 'Power BI Halex',
-    description: 'Atualiza pregoes abertos no periodo, sem alterar registros existentes.',
-    icon: UploadCloud,
-  },
   {
     href: '/dashboard/import/empenhos-lote',
     title: 'Empenhos em lote',
@@ -47,7 +40,7 @@ export default function ImportHubPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    db.getAuditEvents({ actionPrefix: 'import.', limit: 40 })
+    db.getAuditEvents()
       .then(setEvents)
       .catch((err) => setError(err instanceof Error ? err.message : 'Nao foi possivel carregar o historico.'))
       .finally(() => setLoading(false));

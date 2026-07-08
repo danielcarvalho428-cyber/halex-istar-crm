@@ -17,11 +17,9 @@ import {
   PackageSearch,
   ReceiptText,
   Settings,
-  Users,
   X,
 } from "lucide-react";
 import type { AccountRole } from "../../types";
-import NotificationBell from "../../components/NotificationBell";
 import CompanyFooter from "../../components/CompanyFooter";
 
 interface SidebarLinkProps {
@@ -145,11 +143,6 @@ export default function DashboardLayout({
             label: "Administração",
             items: [
               {
-                href: "/dashboard/admin/accounts",
-                icon: <Users size={17} />,
-                label: "Contas",
-              },
-              {
                 href: "/dashboard/configuracoes",
                 icon: <Settings size={17} />,
                 label: "Configurações",
@@ -212,7 +205,6 @@ export default function DashboardLayout({
       <aside className="side-rail hidden w-[252px] shrink-0 flex-col gap-7 px-5 py-6 lg:flex">
         <div className="relative z-10 flex items-start justify-between gap-3">
           <BrandHeader />
-          <NotificationBell />
         </div>
         {nav}
         <SidebarFooter
@@ -250,7 +242,6 @@ export default function DashboardLayout({
         <header className="mobile-topbar flex items-center justify-between p-4 lg:hidden">
           <BrandHeader compact />
           <div className="flex items-center gap-2">
-            <NotificationBell />
             <button
               type="button"
               aria-label="Abrir menu"

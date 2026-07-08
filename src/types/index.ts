@@ -87,9 +87,6 @@ export interface Empenho {
   itens?: EmpenhoItem[];
 }
 
-// Client Storage Connection Mode
-export type ConnectionMode = 'local_storage' | 'supabase';
-
 export type AccountRole = 'admin' | 'viewer';
 
 export interface AppSession {

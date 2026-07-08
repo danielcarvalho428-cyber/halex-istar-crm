@@ -1,14 +1,77 @@
 const crypto = require("node:crypto");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
+const Stripe = require("stripe");
+const nodemailer = require("nodemailer");
 
 initializeApp();
 const db = getFirestore();
 const signingKey = defineSecret("LICENSE_SIGNING_KEY");
+const stripeSecret = defineSecret("STRIPE_SECRET_KEY");
+const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
+const emailUser = defineSecret("LICENSE_EMAIL_USER");
+const emailPassword = defineSecret("LICENSE_EMAIL_PASSWORD");
 const region = "southamerica-east1";
 const adminUid = process.env.LICENSE_ADMIN_UID;
+
+// Non-secret config (set in functions/.env). Price IDs come from your Stripe
+// product; APP_PUBLIC_URL is where the success/cancel pages are hosted.
+const APP_URL = process.env.APP_PUBLIC_URL || "https://halex-istar-crm.web.app";
+const priceForPlan = (plan) =>
+  plan === "annual" ? process.env.STRIPE_PRICE_ANNUAL : process.env.STRIPE_PRICE_MONTHLY;
+
+function stripeClient() {
+  return new Stripe(stripeSecret.value());
+}
+
+function newLicenseKey() {
+  return `HALEX-${crypto.randomBytes(4).toString("hex").toUpperCase()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+}
+
+// Best-effort key delivery by email; skipped (not fatal) when creds aren't set,
+// so the success page still delivers the key.
+async function sendLicenseEmail(toEmail, customerName, licenseKey) {
+  const user = emailUser.value();
+  const pass = emailPassword.value();
+  if (!user || !pass || !toEmail) return false;
+  const transport = nodemailer.createTransport({ service: "gmail", auth: { user, pass } });
+  await transport.sendMail({
+    from: `Halex Istar CRM <${user}>`,
+    to: toEmail,
+    subject: "Sua licença do Halex Istar CRM",
+    text: [
+      `Olá${customerName ? ` ${customerName}` : ""},`,
+      "",
+      "Obrigado pela assinatura do Halex Istar CRM. Sua chave de licença é:",
+      "",
+      licenseKey,
+      "",
+      "Abra o aplicativo, cole a chave na tela de ativação e clique em Ativar.",
+      "Cada licença permite ativar até 2 computadores.",
+      "",
+      "Equipe Halex Istar",
+    ].join("\n"),
+  });
+  return true;
+}
+
+async function licenseBySubscription(subscriptionId) {
+  if (!subscriptionId) return null;
+  const snap = await db
+    .collection("licenses")
+    .where("stripeSubscriptionId", "==", subscriptionId)
+    .limit(1)
+    .get();
+  return snap.empty ? null : snap.docs[0];
+}
+
+function subscriptionPeriodEndMs(subscription) {
+  return subscription?.current_period_end
+    ? subscription.current_period_end * 1000
+    : Date.now();
+}
 
 function requireAdmin(request) {
   if (!request.auth || request.auth.uid !== adminUid) {
@@ -170,3 +233,152 @@ exports.removeLicenseDevice = onCall({ region }, async (request) => {
   await db.collection("licenses").doc(id).update({ [`devices.${deviceId}`]: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() });
   return { removed: true };
 });
+
+// ---------------------------------------------------------------------------
+// Stripe subscriptions — a paying customer gets a license automatically. Manual
+// comp licenses still go through saveLicense above; both write the same doc.
+// ---------------------------------------------------------------------------
+
+// Public: the app's "Assinar" button calls this to get a hosted Checkout URL.
+exports.createCheckoutSession = onCall({ region, secrets: [stripeSecret] }, async (request) => {
+  const plan = request.data?.plan === "annual" ? "annual" : "monthly";
+  const email = text(request.data?.email, 200).toLowerCase();
+  const priceId = priceForPlan(plan);
+  if (!priceId) throw new HttpsError("failed-precondition", "Plano não configurado no servidor.");
+  const session = await stripeClient().checkout.sessions.create({
+    mode: "subscription",
+    line_items: [{ price: priceId, quantity: 1 }],
+    customer_email: email || undefined,
+    allow_promotion_codes: true,
+    metadata: { plan },
+    subscription_data: { metadata: { plan } },
+    success_url: `${APP_URL}/license-success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${APP_URL}/license-cancelled`,
+  });
+  return { url: session.url };
+});
+
+// Public: the success page polls this until the webhook has provisioned the key.
+exports.licenseForCheckout = onCall({ region }, async (request) => {
+  const sessionId = text(request.data?.sessionId, 200);
+  if (!sessionId) throw new HttpsError("invalid-argument", "Sessão inválida.");
+  const snap = await db
+    .collection("licenses")
+    .where("stripeCheckoutSessionId", "==", sessionId)
+    .limit(1)
+    .get();
+  if (snap.empty) return { ready: false };
+  const data = snap.docs[0].data();
+  return { ready: true, licenseKey: snap.docs[0].id, customerEmail: data.customerEmail || "" };
+});
+
+async function provisionFromCheckout(stripe, session) {
+  const subscriptionId = session.subscription;
+  if (!subscriptionId) return;
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const email = session.customer_details?.email || session.customer_email || "";
+  const customerName = session.customer_details?.name || "";
+  const plan = session.metadata?.plan === "annual" ? "annual" : "monthly";
+  const expiresAt = subscriptionPeriodEndMs(subscription);
+
+  const existing = await licenseBySubscription(subscriptionId);
+  if (existing) {
+    await existing.ref.set(
+      { status: "active", expiresAt: Timestamp.fromMillis(expiresAt), stripeCheckoutSessionId: session.id, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true },
+    );
+    return existing.id;
+  }
+
+  const licenseId = newLicenseKey();
+  await db.collection("licenses").doc(licenseId).set({
+    customerName: text(customerName),
+    customerEmail: text(email, 200).toLowerCase(),
+    plan,
+    status: "active",
+    expiresAt: Timestamp.fromMillis(expiresAt),
+    maxDevices: 2,
+    graceDays: 7,
+    devices: {},
+    stripeCustomerId: session.customer || null,
+    stripeSubscriptionId: subscriptionId,
+    stripeCheckoutSessionId: session.id,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  await db.collection("license_events").add({ type: "stripe_provisioned", licenseKey: licenseId, subscriptionId, createdAt: FieldValue.serverTimestamp() });
+  await sendLicenseEmail(email, customerName, licenseId).catch((error) => console.error("License email failed:", error));
+  return licenseId;
+}
+
+async function extendFromInvoice(stripe, invoice) {
+  const doc = await licenseBySubscription(invoice.subscription);
+  if (!doc) return; // creation is handled by checkout.session.completed
+  const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+  await doc.ref.set(
+    { status: "active", expiresAt: Timestamp.fromMillis(subscriptionPeriodEndMs(subscription)), updatedAt: FieldValue.serverTimestamp() },
+    { merge: true },
+  );
+}
+
+async function setSubscriptionStatus(subscriptionId, status) {
+  const doc = await licenseBySubscription(subscriptionId);
+  if (!doc) return;
+  await doc.ref.set({ status, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+}
+
+// Stripe -> here. Verifies the signature over the raw body, then provisions,
+// renews, or suspends the matching license.
+exports.stripeWebhook = onRequest(
+  { region, secrets: [stripeSecret, stripeWebhookSecret, emailUser, emailPassword] },
+  async (req, res) => {
+    const stripe = stripeClient();
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.rawBody,
+        req.headers["stripe-signature"],
+        stripeWebhookSecret.value(),
+      );
+    } catch (error) {
+      console.error("Stripe signature verification failed:", error.message);
+      res.status(400).send(`Webhook Error: ${error.message}`);
+      return;
+    }
+
+    try {
+      switch (event.type) {
+        case "checkout.session.completed": {
+          const session = event.data.object;
+          if (session.mode === "subscription" && session.payment_status === "paid") {
+            await provisionFromCheckout(stripe, session);
+          }
+          break;
+        }
+        case "invoice.paid":
+          await extendFromInvoice(stripe, event.data.object);
+          break;
+        case "customer.subscription.deleted":
+          await setSubscriptionStatus(event.data.object.id, "expired");
+          break;
+        case "customer.subscription.updated": {
+          const subscription = event.data.object;
+          if (["canceled", "unpaid", "incomplete_expired"].includes(subscription.status)) {
+            await setSubscriptionStatus(subscription.id, "expired");
+          } else if (subscription.status === "past_due") {
+            await setSubscriptionStatus(subscription.id, "suspended");
+          } else if (subscription.status === "active") {
+            await setSubscriptionStatus(subscription.id, "active");
+          }
+          break;
+        }
+        default:
+          break;
+      }
+      res.json({ received: true });
+    } catch (error) {
+      console.error("Stripe webhook handler error:", error);
+      res.status(500).send("Webhook handler failed");
+    }
+  },
+);

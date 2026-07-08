@@ -872,7 +872,6 @@ function Builder() {
                     )}
                   </div>
                   <div className="quotation-page-meta">
-                    <span>{appDate(toDateInput(issued))}</span>
                     <span>Página {pageIndex + 1} de {quotationPages.length}</span>
                   </div>
                 </div>
@@ -884,35 +883,33 @@ function Builder() {
                       <strong>{client.name}</strong>
                     </div>
                     <dl>
-                      <div><dt>Código</dt><dd>{client.code}</dd></div>
                       <div><dt>CNPJ</dt><dd>{client.cnpj ?? "Não informado"}</dd></div>
                       <div><dt>Cidade</dt><dd>{client.city}/{client.state}</dd></div>
-                      <div><dt>Contato</dt><dd>{client.contact || "Não informado"}</dd></div>
-                      <div><dt>Telefone</dt><dd>{client.phone || "—"}</dd></div>
-                      <div><dt>E-mail</dt><dd>{client.email || "—"}</dd></div>
                     </dl>
                   </section>
                 ) : (
                   <div className="quotation-continuation-client">
                     <strong>{client.name}</strong>
-                    <span>{client.code} · {client.city}/{client.state}</span>
+                    <span>{client.city}/{client.state}</span>
                   </div>
                 )}
 
                 <table className="quotation-table">
                   <colgroup>
                     <col className="w-[6%]" />
-                    <col className="w-[40%]" />
-                    <col className="w-[14%]" />
+                    <col className="w-[36%]" />
+                    <col className="w-[12%]" />
                     <col className="w-[10%]" />
-                    <col className="w-[15%]" />
-                    <col className="w-[15%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[13%]" />
+                    <col className="w-[13%]" />
                   </colgroup>
                   <thead>
                     <tr>
                       <th className="text-left">Item</th>
                       <th className="text-left">Produto / apresentação</th>
                       <th className="text-left">Marca</th>
+                      <th className="text-right">Un./cx</th>
                       <th className="text-right">Qtd.</th>
                       <th className="text-right">Unitário</th>
                       <th className="text-right">Total</th>
@@ -928,6 +925,7 @@ function Builder() {
                           {row.product.presentation && <small>{row.product.presentation}</small>}
                         </td>
                         <td className="quotation-brand-cell">{row.brand || row.product.brand || "—"}</td>
+                        <td className="text-right font-semibold">{Math.max(1, row.product.packSize || 1)}</td>
                         <td className="text-right font-semibold">{row.quantityMode === "units" ? `${row.unitQuantity} un (${row.quantity} cx)` : `${row.quantity} cx`}</td>
                         <td className="text-right">{money(row.quantityMode === "units" ? row.unitPrice : row.unitPrice * (row.product.packSize || 1))}</td>
                         <td className="text-right font-bold">{money(quotationLineTotal(row.quantity, row.product.packSize || 1, row.unitPrice))}</td>
@@ -953,10 +951,9 @@ function Builder() {
                     <section className="quotation-representative">
                       <div className="quotation-representative-heading">
                         <span>Representante comercial</span>
-                        <strong>{seller}</strong>
                       </div>
                       <dl>
-                        <div><dt>Função</dt><dd>{representative.role}</dd></div>
+                        <div><dt>Nome</dt><dd>{seller}</dd></div>
                         <div className="quotation-representative-contact">
                           <dt>Contato</dt>
                           <dd>{representative.phone || "Telefone não informado"}</dd>

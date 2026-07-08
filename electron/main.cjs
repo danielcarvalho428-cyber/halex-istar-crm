@@ -8,6 +8,7 @@ const {
 } = require("electron");
 const { fork } = require("node:child_process");
 const fs = require("node:fs");
+const net = require("node:net");
 const path = require("node:path");
 const XLSX = require("xlsx");
 const nodemailer = require("nodemailer");
@@ -24,7 +25,7 @@ let mainWindow;
 let nextServer;
 let database;
 const billingAttachments = new Map();
-const port = 3210;
+const preferredPort = 3210;
 let updateCheckTimer;
 
 function configureAutoUpdates() {
@@ -146,14 +147,33 @@ function nextDirectory() {
     : path.join(__dirname, "..");
 }
 
-function startNextServer() {
+function findAvailablePort(startPort) {
+  return new Promise((resolve, reject) => {
+    const tryPort = (candidate) => {
+      const server = net.createServer();
+      server.once("error", (error) => {
+        if (error.code === "EADDRINUSE") {
+          tryPort(candidate + 1);
+          return;
+        }
+        reject(error);
+      });
+      server.once("listening", () => {
+        server.close(() => resolve(candidate));
+      });
+      server.listen(candidate, "127.0.0.1");
+    };
+    tryPort(startPort);
+  });
+}
+
+async function startNextServer() {
   if (!app.isPackaged)
     return Promise.resolve(
       process.env.ELECTRON_START_URL || "http://localhost:3001",
     );
   const directory = nextDirectory();
-  console.log("Starting packaged Next server from:", directory);
-  console.log("Standalone server exists:", fs.existsSync(path.join(directory, "server.js")));
+  const port = await findAvailablePort(preferredPort);
   nextServer = fork(path.join(directory, "server.js"), [], {
     cwd: directory,
     env: {
@@ -599,10 +619,20 @@ function registerIpc() {
       filters: [{ name: "PDF", extensions: ["pdf"] }],
     });
     if (result.canceled || !result.filePath) return null;
+    const renderedPageCount = await mainWindow.webContents
+      .executeJavaScript(
+        "document.querySelectorAll('.print-document .quotation-page').length",
+        true,
+      )
+      .catch(() => 0);
+    const pageCount = Number.isFinite(Number(renderedPageCount))
+      ? Math.max(1, Number(renderedPageCount))
+      : 1;
     const data = await mainWindow.webContents.printToPDF({
       printBackground: true,
       pageSize: "A4",
       margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      pageRanges: pageCount === 1 ? "1" : `1-${pageCount}`,
     });
     fs.writeFileSync(result.filePath, data);
     return result.filePath;
@@ -611,14 +641,13 @@ function registerIpc() {
 
 async function createWindow() {
   const url = await startNextServer();
-  console.log("Starting window creation, loading URL:", url);
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1050,
     minHeight: 700,
     backgroundColor: "#f4f6f8",
-    show: true, // Show immediately
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -631,9 +660,13 @@ async function createWindow() {
     return { action: "deny" };
   });
   mainWindow.webContents.on("will-navigate", (event) => {
-    const target = new URL(event.url);
-    const allowed = new URL(url);
-    if (target.origin !== allowed.origin) event.preventDefault();
+    try {
+      const target = new URL(event.url);
+      const allowed = new URL(url);
+      if (target.origin !== allowed.origin) event.preventDefault();
+    } catch {
+      event.preventDefault();
+    }
   });
 
   const startUrl = new URL(url);
@@ -641,9 +674,8 @@ async function createWindow() {
     ? new URL("/dashboard", startUrl).toString()
     : startUrl.toString();
   try {
-    console.log("Loading URL into mainWindow:", targetUrl);
     await mainWindow.loadURL(targetUrl);
-    console.log("URL loaded successfully!");
+    mainWindow.show();
   } catch (err) {
     console.error("Failed to load URL:", err);
     // Don't leave a permanently blank window — show a readable error instead.
@@ -657,8 +689,10 @@ async function createWindow() {
       + `</div></body></html>`;
     try {
       await mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorPage)}`);
+      mainWindow.show();
     } catch (fallbackErr) {
       console.error("Failed to show error page:", fallbackErr);
+      mainWindow.show();
     }
   }
 }

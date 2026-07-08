@@ -1822,6 +1822,21 @@ label[aria-disabled="true"] {
     background: white !important;
   }
 
+  html:has(.print-document),
+  body:has(.print-document) {
+    width: 210mm !important;
+    min-width: 210mm !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  body:has(.print-document) {
+    display: block !important;
+  }
+
   body:has(.print-document) .side-rail,
   body:has(.print-document) .mobile-topbar,
   body:has(.print-document) .company-footer,
@@ -1853,14 +1868,19 @@ label[aria-disabled="true"] {
 
   body:has(.print-document) .quotation-page {
     width: 210mm !important;
-    height: 297mm !important;
-    min-height: 297mm !important;
-    max-height: 297mm !important;
+    height: 296mm !important;
+    min-height: 296mm !important;
+    max-height: 296mm !important;
     aspect-ratio: auto;
     margin: 0 !important;
     overflow: hidden !important;
     border: 0 !important;
     box-shadow: none !important;
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  body:has(.print-document) .quotation-page:not(:last-child) {
     break-after: page;
     page-break-after: always;
   }
@@ -1888,12 +1908,12 @@ label[aria-disabled="true"] {
   }
 
   body:has(.print-document) .quotation-brand-name {
-    font-size: 18pt;
+    font-size: 16pt;
   }
 
   body:has(.print-document) .quotation-brand-subtitle,
   body:has(.print-document) .quotation-eyebrow {
-    font-size: 6.5pt;
+    font-size: 6.8pt;
   }
 
   body:has(.print-document) .quotation-page-heading {
@@ -1905,7 +1925,7 @@ label[aria-disabled="true"] {
   }
 
   body:has(.print-document) .quotation-page-meta {
-    font-size: 6.5pt;
+    font-size: 6.8pt;
   }
 
   body:has(.print-document) .quotation-client {
@@ -1917,11 +1937,11 @@ label[aria-disabled="true"] {
   body:has(.print-document) .quotation-client-name span,
   body:has(.print-document) .quotation-client dt,
   body:has(.print-document) .quotation-conditions dt {
-    font-size: 6pt;
+    font-size: 6.4pt;
   }
 
   body:has(.print-document) .quotation-client-name strong {
-    font-size: 9pt;
+    font-size: 9.2pt;
   }
 
   body:has(.print-document) .quotation-client dl,
@@ -1931,7 +1951,7 @@ label[aria-disabled="true"] {
 
   body:has(.print-document) .quotation-client dd,
   body:has(.print-document) .quotation-conditions dd {
-    font-size: 6.5pt;
+    font-size: 6.8pt;
   }
 
   body:has(.print-document) .quotation-continuation-client {
@@ -1942,29 +1962,29 @@ label[aria-disabled="true"] {
 
   body:has(.print-document) .quotation-table {
     margin-top: 2.5mm;
-    font-size: 6.6pt;
+    font-size: 6.8pt;
   }
 
   body:has(.print-document) .quotation-table th {
-    padding: 1.5mm 1.8mm;
-    font-size: 6pt;
+    padding: 1.45mm 1.5mm;
+    font-size: 6.2pt;
   }
 
   body:has(.print-document) .quotation-table td {
-    padding: 1.5mm 1.8mm;
+    padding: 1.45mm 1.5mm;
   }
 
   body:has(.print-document) .quotation-product-cell span,
   body:has(.print-document) .quotation-product-cell small {
-    font-size: 6pt;
+    font-size: 6.2pt;
   }
 
   body:has(.print-document) .quotation-product-cell strong {
-    font-size: 6.6pt;
+    font-size: 6.8pt;
   }
 
   body:has(.print-document) .quotation-brand-cell {
-    font-size: 6.6pt;
+    font-size: 6.8pt;
   }
 
   body:has(.print-document) .quotation-summary {
@@ -1984,11 +2004,11 @@ label[aria-disabled="true"] {
   }
 
   body:has(.print-document) .quotation-grand-total span {
-    font-size: 6.5pt;
+    font-size: 6.8pt;
   }
 
   body:has(.print-document) .quotation-grand-total strong {
-    font-size: 10pt;
+    font-size: 10.5pt;
   }
 
   body:has(.print-document) .quotation-conditions {
@@ -2012,11 +2032,7 @@ label[aria-disabled="true"] {
   body:has(.print-document) .quotation-representative-heading span,
   body:has(.print-document) .quotation-representative dt,
   body:has(.print-document) .quotation-representative dd {
-    font-size: 6pt;
-  }
-
-  body:has(.print-document) .quotation-representative-heading strong {
-    font-size: 7.5pt;
+    font-size: 6.6pt;
   }
 
   body:has(.print-document) .quotation-footer {

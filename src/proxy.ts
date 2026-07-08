@@ -14,9 +14,7 @@ function isAdminOnlyPath(pathname: string) {
 export async function proxy(request: NextRequest) {
   if (process.env.HALEX_DESKTOP === "1") return NextResponse.next();
 
-  const localPreview =
-    process.env.NODE_ENV === "development" &&
-    !process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const localPreview = process.env.NODE_ENV === "development";
   if (localPreview) return NextResponse.next();
 
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;

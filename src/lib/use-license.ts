@@ -121,6 +121,28 @@ function save(result: { token: string; license: ServerLicense }) {
   return stored;
 }
 
+// Starts a Stripe subscription: returns a hosted Checkout URL to open in the
+// browser. After paying, the customer receives a license key (by email and on
+// the success page) to activate here.
+export async function createSubscriptionCheckout(
+  plan: "monthly" | "annual",
+  email: string,
+): Promise<string> {
+  const response = await fetch(`${FUNCTIONS_URL}/createCheckoutSession`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ data: { plan, email } }),
+  });
+  const body = (await response.json().catch(() => null)) as {
+    result?: { url: string };
+    error?: { message?: string };
+  } | null;
+  if (!response.ok || body?.error || !body?.result?.url) {
+    throw new Error(body?.error?.message || "Não foi possível iniciar o pagamento.");
+  }
+  return body.result.url;
+}
+
 export function useLicense() {
   const [isValid, setIsValid] = useState(false);
   const [isChecking, setIsChecking] = useState(true);

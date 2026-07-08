@@ -22,6 +22,13 @@
 /build
 /release
 
+# packaged desktop installers / update manifests (belong in /release, never the source tree)
+*.dmg
+*.zip
+*.blockmap
+latest-mac.yml
+latest.yml
+
 # misc
 .DS_Store
 *.pem
@@ -43,9 +50,6 @@ firebase-debug*.log
 
 # vercel
 .vercel
-
-# supabase cli
-supabase/.temp/
 
 # typescript
 *.tsbuildinfo
