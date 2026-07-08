@@ -1,6 +1,6 @@
 {
   "name": "halex-istar-crm",
-  "version": "0.2.15",
+  "version": "0.2.16",
   "type": "module",
   "description": "CRM offline para clientes privados e cotações Halex Istar",
   "author": "Daniel Carvalho",
