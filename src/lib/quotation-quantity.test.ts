@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   isFullBoxQuantity,
+  quotationCurrencyValue,
   quotationDisplayUnitPrice,
+  quotationLineDisplayTotal,
   quotationLineTotal,
   quotationLineTotalFromUnits,
   quotationLineUnits,
@@ -50,4 +52,18 @@ test("price drafts are isolated by quantity mode so stale box prices cannot over
   assert.equal(quotationPriceDraftKey("P1", "units"), "P1:units");
   assert.equal(quotationPriceDraftKey("P1", "boxes"), "P1:boxes");
   assert.notEqual(quotationPriceDraftKey("P1", "units"), quotationPriceDraftKey("P1", "boxes"));
+});
+
+test("line display totals use the same cents value printed to the client", () => {
+  assert.equal(quotationCurrencyValue(0.2989642033224), 0.3);
+  assert.equal(quotationLineDisplayTotal("units", 75, 15000, 200, 0.2989642033224), 4500);
+  assert.equal(quotationLineDisplayTotal("units", 25, 5000, 200, 0.4473236275200001), 2250);
+  assert.equal(quotationLineDisplayTotal("units", 5, 500, 100, 0.92183112), 460);
+  assert.equal(quotationLineDisplayTotal("units", 9, 540, 60, 3.6150240000000005), 1954.8);
+  assert.equal(quotationLineDisplayTotal("units", 24, 720, 30, 6.426), 4629.6);
+  assert.equal(quotationLineDisplayTotal("units", 40, 400, 10, 3.121480188288), 1248);
+});
+
+test("box-mode display totals multiply boxes by the displayed box price", () => {
+  assert.equal(quotationLineDisplayTotal("boxes", 3, undefined, 20, 0.2989642033224), 17.94);
 });

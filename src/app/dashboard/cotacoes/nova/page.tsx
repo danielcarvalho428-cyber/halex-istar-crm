@@ -27,7 +27,8 @@ import {
 import {
   isFullBoxQuantity,
   quotationDisplayUnitPrice,
-  quotationLineTotalFromUnits,
+  quotationCurrencyValue,
+  quotationLineDisplayTotal,
   quotationLineUnits,
   quotationPriceDraftKey,
   quotationUnitPriceFromDisplay,
@@ -383,13 +384,13 @@ function Builder() {
   const totalForLine = (line: QuoteLine) => {
     const product = productById.get(line.productId);
     if (!product) return 0;
-    const units = quotationLineUnits(
+    return quotationLineDisplayTotal(
       line.quantityMode,
       line.quantity,
       line.unitQuantity,
       product.packSize || 1,
+      line.unitPrice,
     );
-    return quotationLineTotalFromUnits(units, line.unitPrice);
   };
   const lineHasInvalidQuantity = (line: QuoteLine) => {
     if (line.quantityMode !== "units") return false;
@@ -399,9 +400,11 @@ function Builder() {
     return !isFullBoxQuantity(line.unitQuantity || 0, packSize);
   };
   const hasInvalidQuantity = lines.some(lineHasInvalidQuantity);
-  const subtotal = lines.reduce(
-    (sum, line) => (lineHasInvalidQuantity(line) ? sum : sum + totalForLine(line)),
-    0,
+  const subtotal = quotationCurrencyValue(
+    lines.reduce(
+      (sum, line) => (lineHasInvalidQuantity(line) ? sum : sum + totalForLine(line)),
+      0,
+    ),
   );
   const valid = new Date(issued);
   valid.setDate(valid.getDate() + validDays);
@@ -1101,7 +1104,7 @@ function Builder() {
                               )}
                             </td>
                             <td className="text-center">{money(row.quantityMode === "units" ? row.unitPrice : row.unitPrice * (row.product.packSize || 1))}</td>
-                            <td className="text-center font-bold">{money(quotationLineTotalFromUnits(quotationLineUnits(row.quantityMode, row.quantity, row.unitQuantity, row.product.packSize || 1), row.unitPrice))}</td>
+                            <td className="text-center font-bold">{money(quotationLineDisplayTotal(row.quantityMode, row.quantity, row.unitQuantity, row.product.packSize || 1, row.unitPrice))}</td>
                           </>
                         )}
                       </tr>

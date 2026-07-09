@@ -29,6 +29,11 @@ export function quotationLineTotalFromUnits(units: number, unitPrice: number) {
   return Math.max(0, Math.trunc(Number(units) || 0)) * Math.max(0, Number(unitPrice) || 0);
 }
 
+export function quotationCurrencyValue(value: number) {
+  const safeValue = Math.max(0, Number(value) || 0);
+  return Math.round((safeValue + Number.EPSILON) * 100) / 100;
+}
+
 export function isFullBoxQuantity(units: number, packSize: number) {
   const safeUnits = Math.trunc(Number(units) || 0);
   const safePackSize = Math.max(1, Math.trunc(Number(packSize) || 1));
@@ -55,6 +60,24 @@ export function quotationUnitPriceFromDisplay(
   if (quantityMode === "units") return safeDisplayPrice;
   const safePackSize = Math.max(1, Math.trunc(Number(packSize) || 1));
   return safeDisplayPrice / safePackSize;
+}
+
+export function quotationLineDisplayTotal(
+  quantityMode: QuotationQuantityMode | undefined,
+  boxes: number,
+  unitQuantity: number | undefined,
+  packSize: number,
+  unitPrice: number,
+) {
+  const safeBoxes = Math.max(0, Math.trunc(Number(boxes) || 0));
+  const safePackSize = Math.max(1, Math.trunc(Number(packSize) || 1));
+  if (quantityMode === "units") {
+    const units = quotationLineUnits(quantityMode, boxes, unitQuantity, safePackSize);
+    return quotationCurrencyValue(units * quotationCurrencyValue(unitPrice));
+  }
+  return quotationCurrencyValue(
+    safeBoxes * quotationCurrencyValue(quotationDisplayUnitPrice(quantityMode, unitPrice, safePackSize)),
+  );
 }
 
 export function quotationPriceDraftKey(
