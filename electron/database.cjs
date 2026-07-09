@@ -183,9 +183,18 @@ class LocalDatabase {
     this.ensureColumn("agreement_groups", "price_table_name", "TEXT");
     this.ensureColumn("agreement_groups", "price_table_imported_at", "TEXT");
     this.cleanupFalseManualPurchaseDates();
+    this.reconcileActiveTable();
     if (this.seedDemoData) this.seed();
     if (this.referenceData) this.seedReferenceData(this.referenceData);
     this.persist();
+  }
+
+  // When a commercial (sales) table is active it is the single price source, so
+  // no catalog version should still be flagged active. This repairs databases
+  // created before the two systems were made mutually exclusive.
+  reconcileActiveTable() {
+    if (!this.getSetting("active_sales_price_table")) return;
+    this.db.run("UPDATE price_table_versions SET active = 0");
   }
 
   seedReferenceData(referenceData) {
@@ -480,6 +489,9 @@ class LocalDatabase {
     const ignored = rows.length - validRows.length;
     this.db.run("BEGIN");
     try {
+      // A newly imported catalog becomes the single active source, replacing any
+      // commercial (sales) table so the two systems never both claim "active".
+      this.db.run("DELETE FROM settings WHERE key = 'active_sales_price_table'");
       this.db.run("UPDATE price_table_versions SET active = 0");
       this.db.run(
         "INSERT INTO price_table_versions(id,name,imported_at,row_count,active) VALUES(?,?,?,?,1)",
@@ -541,6 +553,11 @@ class LocalDatabase {
     const now = new Date().toISOString();
     this.db.run("BEGIN");
     try {
+      // The commercial table becomes the single active price source: retire any
+      // catalog version still flagged active and deactivate leftover products so
+      // the "Histórico de tabelas" list and quotations reflect only this table.
+      this.db.run("UPDATE price_table_versions SET active = 0");
+      this.db.run("UPDATE products SET active = 0, updated_at = ?", [now]);
       for (const product of table.products) {
         const existing = this.rows(
           "SELECT id,pack_size,brand,unit FROM products WHERE code = ?",
@@ -609,6 +626,9 @@ class LocalDatabase {
     const now = new Date().toISOString();
     this.db.run("BEGIN");
     try {
+      // Choosing a catalog version clears the commercial table so only one price
+      // source is ever active at a time.
+      this.db.run("DELETE FROM settings WHERE key = 'active_sales_price_table'");
       this.db.run(
         "UPDATE price_table_versions SET active = CASE WHEN id = ? THEN 1 ELSE 0 END",
         [versionId],

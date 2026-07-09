@@ -175,7 +175,7 @@ function salesPriceTableFromSheets(sheets, sourceName) {
     }
   }
 
-  const periodMatch = String(sourceName || "").match(/(0[1-9]|1[0-2])[.\-_](20\d{2})/);
+  const periodMatch = String(sourceName || "").match(/(0[1-9]|1[0-2])[.\-_]?(20\d{2})/);
   const period = periodMatch ? `${periodMatch[1]}.${periodMatch[2]}` : "Tabela importada";
   return {
     name: String(sourceName || period),
