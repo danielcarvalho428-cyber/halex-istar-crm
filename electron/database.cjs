@@ -183,10 +183,22 @@ class LocalDatabase {
     this.ensureColumn("agreement_groups", "price_table_name", "TEXT");
     this.ensureColumn("agreement_groups", "price_table_imported_at", "TEXT");
     this.cleanupFalseManualPurchaseDates();
+    this.repairKnownProductData();
     this.reconcileActiveTable();
     if (this.seedDemoData) this.seed();
     if (this.referenceData) this.seedReferenceData(this.referenceData);
     this.persist();
+  }
+
+  repairKnownProductData() {
+    const now = new Date().toISOString();
+    this.db.run(
+      "UPDATE products SET pack_size = 100, updated_at = ? WHERE code = '40000389' AND COALESCE(pack_size, 0) <> 100",
+      [now],
+    );
+    this.db.run(
+      "UPDATE price_table_items SET pack_size = 100 WHERE code = '40000389' AND COALESCE(pack_size, 0) <> 100",
+    );
   }
 
   // When a commercial (sales) table is active it is the single price source, so

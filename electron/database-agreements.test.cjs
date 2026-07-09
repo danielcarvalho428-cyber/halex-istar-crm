@@ -104,6 +104,28 @@ test("repairs false purchase dates created by the old manual-client form", async
   });
 });
 
+test("repairs known package quantity corrections on existing databases", async () => {
+  const file = path.join(os.tmpdir(), `halex-product-repair-${randomUUID()}.sqlite`);
+  const database = new LocalDatabase(file);
+  await database.open();
+  try {
+    database.importPriceTable(
+      [{ code: "40000389", description: "GLICOSE 5% SF 100 ML", price: 2.97, pack_size: 10 }],
+      "wrong-pack.xlsx",
+    );
+
+    const reopened = new LocalDatabase(file);
+    await reopened.open();
+    assert.equal(reopened.listProducts().find((item) => item.code === "40000389").pack_size, 100);
+    assert.equal(
+      reopened.rows("SELECT pack_size FROM price_table_items WHERE code = '40000389'")[0].pack_size,
+      100,
+    );
+  } finally {
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  }
+});
+
 test("imports a product catalog without prices", async () => {
   await withDatabase((database) => {
     const result = database.importPriceTable(
