@@ -152,10 +152,11 @@ const seedProducts = [
 ];
 
 class LocalDatabase {
-  constructor(filePath, { seedDemoData = false } = {}) {
+  constructor(filePath, { seedDemoData = false, referenceData = null } = {}) {
     this.filePath = filePath;
     this.db = null;
     this.seedDemoData = seedDemoData;
+    this.referenceData = referenceData;
   }
 
   async open() {
@@ -183,7 +184,101 @@ class LocalDatabase {
     this.ensureColumn("agreement_groups", "price_table_imported_at", "TEXT");
     this.cleanupFalseManualPurchaseDates();
     if (this.seedDemoData) this.seed();
+    if (this.referenceData) this.seedReferenceData(this.referenceData);
     this.persist();
+  }
+
+  seedReferenceData(referenceData) {
+    const existingProducts =
+      this.db.exec("SELECT count(*) AS total FROM products")[0]
+        ?.values[0]?.[0] || 0;
+    if (existingProducts) return false;
+
+    const products = Array.isArray(referenceData?.products)
+      ? referenceData.products.filter((value) => value?.code && value?.description)
+      : [];
+    if (!products.length) return false;
+
+    const priceItems = Array.isArray(referenceData?.priceTable?.items)
+      ? referenceData.priceTable.items.filter((value) => value?.code && value?.description)
+      : [];
+    const now = new Date().toISOString();
+    this.db.run("BEGIN");
+    try {
+      const productStatement = this.db.prepare(
+        `INSERT INTO products
+          (id,code,description,presentation,brand,unit,price,minimum_price,pack_size,active,updated_at)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+      );
+      for (const value of products) {
+        productStatement.run([
+          crypto.randomUUID(),
+          String(value.code),
+          String(value.description),
+          value.presentation || null,
+          value.brand || "Halex Istar",
+          value.unit || "UN",
+          Number(value.price) || 0,
+          value.minimum_price == null ? null : Number(value.minimum_price),
+          Math.max(1, Math.trunc(Number(value.pack_size) || 1)),
+          value.active === false || Number(value.active) === 0 ? 0 : 1,
+          now,
+        ]);
+      }
+      productStatement.free();
+
+      if (priceItems.length) {
+        const versionId = crypto.randomUUID();
+        this.db.run(
+          "INSERT INTO price_table_versions(id,name,imported_at,row_count,active) VALUES(?,?,?,?,1)",
+          [
+            versionId,
+            referenceData.priceTable.name || "Tabela de produtos Halex Istar",
+            referenceData.priceTable.importedAt || now,
+            priceItems.length,
+          ],
+        );
+        const itemStatement = this.db.prepare(
+          `INSERT INTO price_table_items
+            (id,version_id,code,description,presentation,brand,unit,price,minimum_price,pack_size)
+           VALUES(?,?,?,?,?,?,?,?,?,?)`,
+        );
+        for (const value of priceItems) {
+          itemStatement.run([
+            crypto.randomUUID(),
+            versionId,
+            String(value.code),
+            String(value.description),
+            value.presentation || null,
+            value.brand || "Halex Istar",
+            value.unit || "UN",
+            Number(value.price) || 0,
+            value.minimum_price == null ? null : Number(value.minimum_price),
+            Math.max(1, Math.trunc(Number(value.pack_size) || 1)),
+          ]);
+        }
+        itemStatement.free();
+      }
+
+      if (referenceData.salesPriceTable) {
+        this.db.run(
+          "INSERT INTO settings(key,value) VALUES('active_sales_price_table',?)",
+          [
+            JSON.stringify({
+              ...referenceData.salesPriceTable,
+              importedAt: referenceData.salesPriceTable.importedAt || now,
+            }),
+          ],
+        );
+      }
+
+      this.db.run("COMMIT");
+      this.persist();
+      return true;
+    } catch (error) {
+      this.db.run("ROLLBACK");
+      throw error;
+    }
   }
 
   seed() {

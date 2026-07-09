@@ -31,7 +31,7 @@ async function callFunction<T>(name: string, data: Record<string, unknown> = {})
 
 export default function LicenseAdminPage() {
   const [user, setUser] = useState(auth.currentUser);
-  const [email, setEmail] = useState("faturamento.hibiosoluto@gmail.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [licenses, setLicenses] = useState<License[]>([]);
   const [customerName, setCustomerName] = useState("");

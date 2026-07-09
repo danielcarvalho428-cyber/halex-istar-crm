@@ -22,12 +22,12 @@ export default function SettingsPage() {
   const [updateNotice, setUpdateNotice] = useState("");
   const [updateError, setUpdateError] = useState("");
   const [emailForm, setEmailForm] = useState<EmailForm>({
-    email: "faturamento.hibiosoluto@gmail.com",
+    email: "",
     appPassword: "",
-    senderName: "Faturamento Halex Istar | Biosoluto",
-    signatureName: "Daniel Almeida",
-    signatureRole: "Acompanhamento de Pedidos e Faturamento",
-    phone: "(62) 99608-5875",
+    senderName: "",
+    signatureName: "",
+    signatureRole: "",
+    phone: "",
   });
   useEffect(() => {
     window.halexDesktop?.settings

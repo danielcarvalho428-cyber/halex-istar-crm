@@ -29,6 +29,57 @@ test("a production database starts without demonstration clients or purchases", 
   }
 });
 
+test("seeds only shared reference data into an empty production database", async () => {
+  const file = path.join(os.tmpdir(), `halex-defaults-${randomUUID()}.sqlite`);
+  const referenceData = {
+    products: [
+      {
+        code: "DEFAULT1",
+        description: "Produto padrão",
+        brand: "Halex Istar",
+        unit: "CX",
+        price: 10.5,
+        pack_size: 24,
+        active: true,
+      },
+    ],
+    priceTable: {
+      name: "Tabela padrão",
+      importedAt: "2026-07-01T00:00:00.000Z",
+      items: [
+        {
+          code: "DEFAULT1",
+          description: "Produto padrão",
+          brand: "Halex Istar",
+          unit: "CX",
+          price: 10.5,
+          pack_size: 24,
+        },
+      ],
+    },
+    salesPriceTable: {
+      name: "Preços padrão",
+      products: [{ code: "DEFAULT1", description: "Produto padrão" }],
+      regions: [{ value: "co", label: "Centro-Oeste" }],
+      categories: [{ value: "hospital", label: "Hospital" }],
+      prices: { co: { hospital: { DEFAULT1: 10.5 } } },
+    },
+  };
+  const database = new LocalDatabase(file, { referenceData });
+  await database.open();
+  try {
+    assert.deepEqual(database.listClients(), []);
+    assert.deepEqual(database.listQuotations(), []);
+    assert.equal(database.listProducts().length, 1);
+    assert.equal(database.listProducts()[0].pack_size, 24);
+    assert.equal(database.listPriceVersions().length, 1);
+    assert.equal(database.getSalesPriceTable().prices.co.hospital.DEFAULT1, 10.5);
+    assert.equal(database.getSetting("email_config"), null);
+  } finally {
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  }
+});
+
 test("repairs false purchase dates created by the old manual-client form", async () => {
   await withDatabase((database) => {
     database.saveClient({

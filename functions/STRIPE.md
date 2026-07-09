@@ -31,7 +31,7 @@ Defina cada um com `firebase functions:secrets:set NOME` (como você já fez com
 
 - `STRIPE_SECRET_KEY` — a chave secreta da API (`sk_live_...` ou `sk_test_...`).
 - `STRIPE_WEBHOOK_SECRET` — o segredo de assinatura do webhook (passo 5, `whsec_...`).
-- `LICENSE_EMAIL_USER` — o Gmail que envia a chave (ex.: `faturamento.hibiosoluto@gmail.com`).
+- `LICENSE_EMAIL_USER` — o Gmail que envia a chave (ex.: `licencas@suaempresa.com`).
 - `LICENSE_EMAIL_PASSWORD` — uma **senha de app** do Gmail (não a senha normal).
   Gere em: Conta Google → Segurança → Verificação em duas etapas → Senhas de app.
 

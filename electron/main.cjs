@@ -17,6 +17,7 @@ const { createWorker } = require("tesseract.js");
 const portugueseOcr = require("@tesseract.js-data/por");
 const crypto = require("node:crypto");
 const { LocalDatabase } = require("./database.cjs");
+const defaultReferenceData = require("./defaults/reference-data.json");
 const { normalizeHeader, field, numberValue, productRows, salesPriceTableFromSheets } = require("./product-import.cjs");
 const { parseNfePdfIdentity } = require("./nfe-document.cjs");
 const { autoUpdater } = require("electron-updater");
@@ -27,6 +28,15 @@ let database;
 const billingAttachments = new Map();
 const preferredPort = 3210;
 let updateCheckTimer;
+
+function installDefaultLetterhead() {
+  if (database.getSetting("letterhead_path")) return;
+  const source = path.join(__dirname, "defaults", "letterhead.png");
+  if (!fs.existsSync(source)) return;
+  const target = path.join(app.getPath("userData"), "letterhead.png");
+  fs.copyFileSync(source, target);
+  database.setSetting("letterhead_path", target);
+}
 
 function configureAutoUpdates() {
   // Electron's macOS updater requires a code-signed application. Until the
@@ -700,8 +710,10 @@ async function createWindow() {
 app.whenReady().then(async () => {
   database = new LocalDatabase(
     path.join(app.getPath("userData"), "halex-istar.sqlite"),
+    { referenceData: defaultReferenceData },
   );
   await database.open();
+  installDefaultLetterhead();
   registerIpc();
   await createWindow();
   configureAutoUpdates();
