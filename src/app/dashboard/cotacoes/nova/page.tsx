@@ -24,7 +24,7 @@ import {
   estimatedProductRowHeight,
   paginateQuotationRows,
 } from "@/lib/quotation-pagination";
-import { isFullBoxQuantity, quotationLineTotal } from "@/lib/quotation-quantity";
+import { isFullBoxQuantity, quotationLineUnits, quotationLineTotalFromUnits } from "@/lib/quotation-quantity";
 import {
   DEFAULT_SALES_PRICE_TABLE,
   DEFAULT_SALES_PRICE_REGION,
@@ -78,6 +78,8 @@ function toDateInput(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+const PAYMENT_PRESETS = ["28/42/56 Dias", "30/45/60 Dias", "30 Dias", "À vista"];
+
 function Builder() {
   const params = useSearchParams();
   const editId = params.get("editId");
@@ -93,7 +95,9 @@ function Builder() {
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [validDays, setValidDays] = useState(15);
-  const [payment, setPayment] = useState("30 dias");
+  const [payment, setPayment] = useState("30/45/60 Dias");
+  const [paymentIsCustom, setPaymentIsCustom] = useState(false);
+  const [hidePrices, setHidePrices] = useState(false);
   const [delivery, setDelivery] = useState(
     "Até 10 dias úteis após confirmação",
   );
@@ -200,7 +204,9 @@ function Builder() {
             // Keep the loaded prices exactly as saved — sync the client ref so
             // the client-change effect doesn't recalculate them from the table.
             prevClientIdRef.current = quote.client_id;
-            setPayment(quote.payment_terms || "30 dias");
+            const loadedPayment = quote.payment_terms || "30/45/60 Dias";
+            setPayment(loadedPayment);
+            setPaymentIsCustom(!PAYMENT_PRESETS.includes(loadedPayment));
             setDelivery(
               quote.delivery_terms || "Até 10 dias úteis após confirmação",
             );
@@ -246,6 +252,15 @@ function Builder() {
     () => new Map(clients.map((item) => [item.id, item])),
     [clients],
   );
+
+  // The initial clientId is a preview id; once the real client list loads, snap
+  // to the first real client so the dropdown reflects a valid, selectable choice.
+  useEffect(() => {
+    if (editId) return;
+    if (clients.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!clientById.has(clientId)) setClientId(clients[0].id);
+  }, [editId, clients, clientById, clientId]);
 
   const priceForClient = useCallback((productId: string, selectedClientId = clientId) => {
     const product = productById.get(productId);
@@ -340,7 +355,13 @@ function Builder() {
   const totalForLine = (line: QuoteLine) => {
     const product = productById.get(line.productId);
     if (!product) return 0;
-    return quotationLineTotal(line.quantity, product.packSize || 1, line.unitPrice);
+    const units = quotationLineUnits(
+      line.quantityMode,
+      line.quantity,
+      line.unitQuantity,
+      product.packSize || 1,
+    );
+    return quotationLineTotalFromUnits(units, line.unitPrice);
   };
   const subtotal = lines.reduce((sum, line) => sum + totalForLine(line), 0);
   const valid = new Date(issued);
@@ -386,7 +407,7 @@ function Builder() {
                 }
               : line,
           )
-        : [...current, { productId, quantity: 1, unitPrice, brand, quantityMode: "boxes" }];
+        : [...current, { productId, quantity: 1, unitPrice, brand, quantityMode: "units", unitQuantity: packSize }];
     });
   }
   function update(index: number, patch: Partial<QuoteLine>) {
@@ -585,11 +606,32 @@ function Builder() {
               </label>
               <label className="text-xs font-bold">
                 Pagamento
-                <input
+                <select
                   className="form-input mt-2 w-full"
-                  value={payment}
-                  onChange={(e) => setPayment(e.target.value)}
-                />
+                  value={paymentIsCustom ? "__custom__" : payment}
+                  onChange={(e) => {
+                    if (e.target.value === "__custom__") {
+                      setPaymentIsCustom(true);
+                      setPayment("");
+                    } else {
+                      setPaymentIsCustom(false);
+                      setPayment(e.target.value);
+                    }
+                  }}
+                >
+                  {PAYMENT_PRESETS.map((preset) => (
+                    <option key={preset} value={preset}>{preset}</option>
+                  ))}
+                  <option value="__custom__">Personalizado…</option>
+                </select>
+                {paymentIsCustom && (
+                  <input
+                    className="form-input mt-2 w-full"
+                    value={payment}
+                    onChange={(e) => setPayment(e.target.value)}
+                    placeholder="Digite a condição de pagamento"
+                  />
+                )}
               </label>
               <label className="text-xs font-bold">
                 Frete
@@ -615,6 +657,15 @@ function Builder() {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                 />
+              </label>
+              <label className="md:col-span-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-bold text-amber-900">
+                <input
+                  type="checkbox"
+                  checked={hidePrices}
+                  onChange={(e) => setHidePrices(e.target.checked)}
+                  className="h-4 w-4 accent-amber-600"
+                />
+                Enviar sem preços — apenas a lista de produtos e unidades por caixa
               </label>
               <fieldset className="md:col-span-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
                 <legend className="px-1 text-[10px] font-bold uppercase tracking-wider text-stone-500">
@@ -684,9 +735,6 @@ function Builder() {
                       </p>
                     )}
                   </div>
-                  <p className="money-value text-sm font-bold">
-                    {money(priceForClient(product.id))}
-                  </p>
                   <button
                     type="button"
                     onClick={() => add(product.id)}
@@ -897,38 +945,59 @@ function Builder() {
                 <table className="quotation-table">
                   <colgroup>
                     <col className="w-[6%]" />
-                    <col className="w-[36%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[13%]" />
-                    <col className="w-[13%]" />
+                    <col className={hidePrices ? "w-[62%]" : "w-[36%]"} />
+                    <col className={hidePrices ? "w-[20%]" : "w-[12%]"} />
+                    <col className={hidePrices ? "w-[12%]" : "w-[10%]"} />
+                    {!hidePrices && (
+                      <>
+                        <col className="w-[10%]" />
+                        <col className="w-[13%]" />
+                        <col className="w-[13%]" />
+                      </>
+                    )}
                   </colgroup>
                   <thead>
                     <tr>
-                      <th className="text-left">Item</th>
+                      <th className="text-center">Item</th>
                       <th className="text-left">Produto / apresentação</th>
-                      <th className="text-left">Marca</th>
-                      <th className="text-right">Un./cx</th>
-                      <th className="text-right">Qtd.</th>
-                      <th className="text-right">Unitário</th>
-                      <th className="text-right">Total</th>
+                      <th className="text-center">Marca</th>
+                      <th className="text-center">Un./cx</th>
+                      {!hidePrices && (
+                        <>
+                          <th className="text-center">Qtd.</th>
+                          <th className="text-center">Unitário</th>
+                          <th className="text-center">Total</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
                     {pageRows.map((row, rowIndex) => (
                       <tr key={row.product.id}>
-                        <td className="quotation-item-number">{previousRows + rowIndex + 1}</td>
+                        <td className="quotation-item-number text-center">{previousRows + rowIndex + 1}</td>
                         <td className="quotation-product-cell">
                           <span>{row.product.code}</span>
                           <strong>{row.product.description}</strong>
                           {row.product.presentation && <small>{row.product.presentation}</small>}
                         </td>
-                        <td className="quotation-brand-cell">{row.brand || row.product.brand || "—"}</td>
-                        <td className="text-right font-semibold">{Math.max(1, row.product.packSize || 1)}</td>
-                        <td className="text-right font-semibold">{row.quantityMode === "units" ? `${row.unitQuantity} un (${row.quantity} cx)` : `${row.quantity} cx`}</td>
-                        <td className="text-right">{money(row.quantityMode === "units" ? row.unitPrice : row.unitPrice * (row.product.packSize || 1))}</td>
-                        <td className="text-right font-bold">{money(quotationLineTotal(row.quantity, row.product.packSize || 1, row.unitPrice))}</td>
+                        <td className="quotation-brand-cell text-center">{row.brand || row.product.brand || "—"}</td>
+                        <td className="text-center font-semibold">{Math.max(1, row.product.packSize || 1)}</td>
+                        {!hidePrices && (
+                          <>
+                            <td className="text-center font-semibold">
+                              {row.quantityMode === "units" ? (
+                                <>
+                                  {row.unitQuantity} un
+                                  <span className="block font-normal" style={{ color: "#64748b" }}>{row.quantity} cx</span>
+                                </>
+                              ) : (
+                                <>{row.quantity} cx</>
+                              )}
+                            </td>
+                            <td className="text-center">{money(row.quantityMode === "units" ? row.unitPrice : row.unitPrice * (row.product.packSize || 1))}</td>
+                            <td className="text-center font-bold">{money(quotationLineTotalFromUnits(quotationLineUnits(row.quantityMode, row.quantity, row.unitQuantity, row.product.packSize || 1), row.unitPrice))}</td>
+                          </>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -937,10 +1006,12 @@ function Builder() {
                 {lastPage && (
                   <div className="quotation-final-block quotation-keep">
                     <section className="quotation-summary">
-                      <div className="quotation-grand-total">
-                        <span>Valor total da proposta</span>
-                        <strong>{money(subtotal)}</strong>
-                      </div>
+                      {!hidePrices && (
+                        <div className="quotation-grand-total">
+                          <span>Valor total da proposta</span>
+                          <strong>{money(subtotal)}</strong>
+                        </div>
+                      )}
                       <dl className="quotation-conditions">
                         <div><dt>Pagamento</dt><dd>{payment}</dd></div>
                         <div><dt>Entrega</dt><dd>{delivery}</dd></div>

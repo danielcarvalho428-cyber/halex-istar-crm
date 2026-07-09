@@ -193,8 +193,26 @@ class LocalDatabase {
   // no catalog version should still be flagged active. This repairs databases
   // created before the two systems were made mutually exclusive.
   reconcileActiveTable() {
-    if (!this.getSetting("active_sales_price_table")) return;
+    const raw = this.getSetting("active_sales_price_table");
+    if (!raw) return;
     this.db.run("UPDATE price_table_versions SET active = 0");
+    // Retire products left over from older imports so the quote picker shows only
+    // the current commercial table (no duplicates / price-less leftovers).
+    let codes = [];
+    try {
+      const table = JSON.parse(raw);
+      codes = Array.isArray(table?.products)
+        ? table.products.map((product) => String(product.code)).filter(Boolean)
+        : [];
+    } catch {
+      return;
+    }
+    if (!codes.length) return;
+    const placeholders = codes.map(() => "?").join(",");
+    this.db.run(
+      `UPDATE products SET active = 0 WHERE code NOT IN (${placeholders})`,
+      codes,
+    );
   }
 
   seedReferenceData(referenceData) {
