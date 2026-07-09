@@ -55,3 +55,11 @@ test("packaged defaults include the corporate letterhead image", () => {
   const letterhead = path.join(defaultsDirectory, "letterhead.png");
   assert.ok(fs.statSync(letterhead).size > 1000);
 });
+
+test("packaged defaults keep product 40000389 as caixa com 100", () => {
+  const product = referenceData.products.find((item) => item.code === "40000389");
+  const priceTableItem = referenceData.priceTable.items.find((item) => item.code === "40000389");
+  assert.equal(product?.description, "GLICOSE 5% SF 100 ML");
+  assert.equal(product?.pack_size, 100);
+  assert.equal(priceTableItem?.pack_size, 100);
+});

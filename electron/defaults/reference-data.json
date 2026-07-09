@@ -340,7 +340,7 @@
       "unit": "UN",
       "price": 2.97283827456,
       "minimum_price": 0,
-      "pack_size": 10,
+      "pack_size": 100,
       "active": true
     },
     {
@@ -1379,7 +1379,7 @@
         "unit": "UN",
         "price": 0,
         "minimum_price": 0,
-        "pack_size": 10,
+        "pack_size": 100,
         "active": true
       },
       {
