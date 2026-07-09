@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isFullBoxQuantity, quotationLineTotal, quotationLineUnits, quotationLineTotalFromUnits } from "./quotation-quantity.ts";
+import {
+  isFullBoxQuantity,
+  quotationDisplayUnitPrice,
+  quotationLineTotal,
+  quotationLineTotalFromUnits,
+  quotationLineUnits,
+  quotationPriceDraftKey,
+  quotationUnitPriceFromDisplay,
+} from "./quotation-quantity.ts";
 
 test("calculates quotation totals from boxes, package quantity, and unit price", () => {
   assert.equal(quotationLineTotal(2, 15, 10), 300);
@@ -28,4 +36,18 @@ test("total from units multiplies units by unit price", () => {
   // 40 units at R$2,50/un = R$100 — the value that was going out stale before
   assert.equal(quotationLineTotalFromUnits(40, 2.5), 100);
   assert.equal(quotationLineTotalFromUnits(quotationLineUnits("units", 2, 60, 10), 3), 180);
+});
+
+test("price display converts between unit and box modes without changing the stored unit price", () => {
+  assert.equal(quotationDisplayUnitPrice("units", 2.5, 20), 2.5);
+  assert.equal(quotationDisplayUnitPrice("boxes", 2.5, 20), 50);
+
+  assert.equal(quotationUnitPriceFromDisplay("units", 2.5, 20), 2.5);
+  assert.equal(quotationUnitPriceFromDisplay("boxes", 50, 20), 2.5);
+});
+
+test("price drafts are isolated by quantity mode so stale box prices cannot overwrite unit prices", () => {
+  assert.equal(quotationPriceDraftKey("P1", "units"), "P1:units");
+  assert.equal(quotationPriceDraftKey("P1", "boxes"), "P1:boxes");
+  assert.notEqual(quotationPriceDraftKey("P1", "units"), quotationPriceDraftKey("P1", "boxes"));
 });

@@ -24,7 +24,14 @@ import {
   estimatedProductRowHeight,
   paginateQuotationRows,
 } from "@/lib/quotation-pagination";
-import { isFullBoxQuantity, quotationLineUnits, quotationLineTotalFromUnits } from "@/lib/quotation-quantity";
+import {
+  isFullBoxQuantity,
+  quotationDisplayUnitPrice,
+  quotationLineTotalFromUnits,
+  quotationLineUnits,
+  quotationPriceDraftKey,
+  quotationUnitPriceFromDisplay,
+} from "@/lib/quotation-quantity";
 import {
   DEFAULT_SALES_PRICE_TABLE,
   DEFAULT_SALES_PRICE_REGION,
@@ -288,6 +295,7 @@ function Builder() {
       prevClientIdRef.current = clientId;
       if (products.length === 0 || clients.length === 0) return;
       // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPriceDrafts({});
       setLines((current) =>
         current.map((line) => {
           const product = productById.get(line.productId);
@@ -315,6 +323,25 @@ function Builder() {
     })));
   }, [priceForClient, salesPriceRegion, salesPriceTable]);
 
+  const importedSalesPriceKey = importedSalesPriceTable
+    ? `${importedSalesPriceTable.name || ""}|${importedSalesPriceTable.importedAt || ""}|${importedSalesPriceTable.period || ""}`
+    : "";
+  useEffect(() => {
+    if (editId || !importedSalesPriceKey) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setPriceDrafts({});
+      setLines((current) => current.map((line) => ({
+        ...line,
+        unitPrice: priceForClient(line.productId),
+      })));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [editId, importedSalesPriceKey, priceForClient]);
+
   useEffect(() => {
     if (
       editId ||
@@ -323,6 +350,7 @@ function Builder() {
       productById.size === 0
     ) return;
     initialAgreementAppliedRef.current = true;
+    setPriceDrafts({});
     setLines((current) =>
       current.map((line) => {
         const product = productById.get(line.productId);
@@ -363,7 +391,18 @@ function Builder() {
     );
     return quotationLineTotalFromUnits(units, line.unitPrice);
   };
-  const subtotal = lines.reduce((sum, line) => sum + totalForLine(line), 0);
+  const lineHasInvalidQuantity = (line: QuoteLine) => {
+    if (line.quantityMode !== "units") return false;
+    const product = productById.get(line.productId);
+    if (!product) return false;
+    const packSize = Math.max(1, product.packSize || 1);
+    return !isFullBoxQuantity(line.unitQuantity || 0, packSize);
+  };
+  const hasInvalidQuantity = lines.some(lineHasInvalidQuantity);
+  const subtotal = lines.reduce(
+    (sum, line) => (lineHasInvalidQuantity(line) ? sum : sum + totalForLine(line)),
+    0,
+  );
   const valid = new Date(issued);
   valid.setDate(valid.getDate() + validDays);
   // Memoized so typing in the catalog search (or any other field) doesn't
@@ -416,13 +455,19 @@ function Builder() {
     );
   }
 
+  function clearPriceDraft(productId: string) {
+    setPriceDrafts((current) => {
+      const next = { ...current };
+      delete next[quotationPriceDraftKey(productId, "units")];
+      delete next[quotationPriceDraftKey(productId, "boxes")];
+      return next;
+    });
+  }
+
   async function saveQuotation(generatePdf = false) {
     if (!client || lines.length === 0) return;
     const invalidLine = lines.find((line) => {
-      if (line.quantityMode !== "units") return false;
-      const product = products.find((item) => item.id === line.productId);
-      const packSize = Math.max(1, product?.packSize || 1);
-      return !isFullBoxQuantity(line.unitQuantity || 0, packSize);
+      return lineHasInvalidQuantity(line);
     });
     if (invalidLine) {
       setNotice("A quantidade em unidades deve completar caixas inteiras.");
@@ -796,8 +841,43 @@ function Builder() {
                 const unitMode = line.quantityMode === "units";
                 const enteredQuantity = unitMode ? (line.unitQuantity ?? line.quantity * packSize) : line.quantity;
                 const invalidUnits = unitMode && !isFullBoxQuantity(enteredQuantity, packSize);
-                // Prices are stored per unit; show/edit the box price in box mode.
-                const displayUnitPrice = unitMode ? line.unitPrice : line.unitPrice * packSize;
+                const priceDraftKey = quotationPriceDraftKey(line.productId, line.quantityMode);
+                const displayUnitPrice = quotationDisplayUnitPrice(
+                  line.quantityMode,
+                  line.unitPrice,
+                  packSize,
+                );
+                const switchQuantityMode = (nextMode: "boxes" | "units") => {
+                  const units = quotationLineUnits(
+                    line.quantityMode,
+                    line.quantity,
+                    line.unitQuantity,
+                    packSize,
+                  );
+                  clearPriceDraft(line.productId);
+                  update(
+                    index,
+                    nextMode === "units"
+                      ? { quantityMode: "units", unitQuantity: units }
+                      : {
+                          quantityMode: "boxes",
+                          quantity: Math.max(1, Math.ceil(units / packSize)),
+                          unitQuantity: undefined,
+                        },
+                  );
+                };
+                const updateQuantity = (amount: number) => {
+                  if (unitMode) {
+                    update(index, {
+                      unitQuantity: amount,
+                      ...(amount > 0 && amount % packSize === 0
+                        ? { quantity: amount / packSize }
+                        : {}),
+                    });
+                  } else {
+                    update(index, { quantity: Math.max(1, amount) });
+                  }
+                };
                 return (
                   <div
                     key={product.id}
@@ -813,20 +893,42 @@ function Builder() {
                     </div>
                     <label className="text-[10px] font-bold uppercase text-stone-500">
                       Quantidade · caixa com {packSize}
-                      <div className="mt-1 grid grid-cols-[82px_1fr] gap-1"><select className="form-input px-2" value={unitMode ? "units" : "boxes"} onChange={(e) => update(index, e.target.value === "units" ? { quantityMode: "units", unitQuantity: line.quantity * packSize } : { quantityMode: "boxes", unitQuantity: undefined })}><option value="boxes">Caixas</option><option value="units">Unidades</option></select><input type="number" min={unitMode ? packSize : 1} step={unitMode ? packSize : 1} className={`form-input w-full ${invalidUnits ? "border-red-400" : ""}`} value={enteredQuantity} onChange={(e) => { const amount = Math.max(0, Math.trunc(Number(e.target.value) || 0)); if (unitMode) update(index, { unitQuantity: amount, ...(amount > 0 && amount % packSize === 0 ? { quantity: amount / packSize } : {}) }); else update(index, { quantity: Math.max(1, amount) }); }} /></div>
+                      <div className="mt-1 grid grid-cols-[82px_1fr] gap-1">
+                        <select
+                          className="form-input px-2"
+                          value={unitMode ? "units" : "boxes"}
+                          onChange={(e) =>
+                            switchQuantityMode(e.target.value === "units" ? "units" : "boxes")
+                          }
+                        >
+                          <option value="boxes">Caixas</option>
+                          <option value="units">Unidades</option>
+                        </select>
+                        <input
+                          type="number"
+                          min={unitMode ? packSize : 1}
+                          step={unitMode ? packSize : 1}
+                          className={`form-input w-full ${invalidUnits ? "border-red-400" : ""}`}
+                          value={enteredQuantity}
+                          onChange={(e) =>
+                            updateQuantity(Math.max(0, Math.trunc(Number(e.target.value) || 0)))
+                          }
+                        />
+                      </div>
                       {invalidUnits && <span className="mt-1 block normal-case text-red-600">Use múltiplos de {packSize} unidades.</span>}
                     </label>
                     <label className="text-[10px] font-bold uppercase text-stone-500">
                       {unitMode ? "Preço por unidade" : "Preço por caixa"}
                       <input
+                        key={priceDraftKey}
                         type="text"
                         inputMode="decimal"
                         className="form-input mt-1 w-full"
-                        value={priceDrafts[line.productId] ?? formatQuotationPriceInput(displayUnitPrice)}
+                        value={priceDrafts[priceDraftKey] ?? formatQuotationPriceInput(displayUnitPrice)}
                         onFocus={(e) => {
                           setPriceDrafts((current) => ({
                             ...current,
-                            [line.productId]: formatQuotationPriceInput(displayUnitPrice),
+                            [priceDraftKey]: formatQuotationPriceInput(displayUnitPrice),
                           }));
                           e.currentTarget.select();
                         }}
@@ -834,17 +936,21 @@ function Builder() {
                           const value = e.target.value;
                           setPriceDrafts((current) => ({
                             ...current,
-                            [line.productId]: value,
+                            [priceDraftKey]: value,
                           }));
                           const entered = parseQuotationPriceInput(value);
                           update(index, {
-                            unitPrice: unitMode ? entered : entered / packSize,
+                            unitPrice: quotationUnitPriceFromDisplay(
+                              line.quantityMode,
+                              entered,
+                              packSize,
+                            ),
                           });
                         }}
                         onBlur={() =>
                           setPriceDrafts((current) => {
                             const next = { ...current };
-                            delete next[line.productId];
+                            delete next[priceDraftKey];
                             return next;
                           })
                         }
@@ -878,7 +984,7 @@ function Builder() {
               <div className="text-right">
                 <p className="text-xs text-stone-500">Total da cotação</p>
                 <p className="money-value mt-1 text-2xl font-bold">
-                  {money(subtotal)}
+                  {hasInvalidQuantity ? "Corrija a quantidade" : money(subtotal)}
                 </p>
               </div>
             </div>
@@ -1009,7 +1115,7 @@ function Builder() {
                       {!hidePrices && (
                         <div className="quotation-grand-total">
                           <span>Valor total da proposta</span>
-                          <strong>{money(subtotal)}</strong>
+                          <strong>{hasInvalidQuantity ? "Corrija a quantidade" : money(subtotal)}</strong>
                         </div>
                       )}
                       <dl className="quotation-conditions">
