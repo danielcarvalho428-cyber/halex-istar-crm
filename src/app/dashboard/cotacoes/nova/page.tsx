@@ -47,6 +47,22 @@ import {
 
 type QuoteLine = { productId: string; quantity: number; unitPrice: number; brand?: string; quantityMode?: "boxes" | "units"; unitQuantity?: number };
 
+// Shape of the debounced autosave written to localStorage while a quote is
+// being built, so an interrupted session (crash, accidental close) can be
+// recovered instead of silently lost.
+type QuoteDraft = {
+  clientId?: string;
+  lines?: QuoteLine[];
+  validDays?: number;
+  payment?: string;
+  delivery?: string;
+  seller?: string;
+  freight?: string;
+  notes?: string;
+  quoteNumber?: string;
+  savedAt?: string;
+};
+
 type StoredQuoteItem = {
   product_id: string;
   quantity: number;
@@ -100,6 +116,7 @@ function Builder() {
   const { toast } = useAppUX();
   const [saving, setSaving] = useState(false);
   const [lastDraftAt, setLastDraftAt] = useState<Date | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<QuoteDraft | null>(null);
   const [clientId, setClientId] = useState(
     params.get("cliente") || previewClients[0].id,
   );
@@ -152,10 +169,53 @@ function Builder() {
 
   useEffect(() => {
     if (lines.length === 0 || savedId) return;
-    const protectDraft = (event: BeforeUnloadEvent) => event.preventDefault();
+    const protectDraft = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Some browsers still require returnValue to actually show the prompt.
+      event.returnValue = "";
+    };
     window.addEventListener("beforeunload", protectDraft);
     return () => window.removeEventListener("beforeunload", protectDraft);
   }, [lines.length, savedId]);
+
+  // Offer to recover an interrupted draft. Runs once on mount for a brand-new
+  // quote (never when editing a saved one), before the autosave effect can
+  // overwrite the stored draft (it only writes once lines exist).
+  useEffect(() => {
+    if (editId) return;
+    try {
+      const raw = localStorage.getItem("quotationWorkingDraft");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as QuoteDraft;
+      if (Array.isArray(parsed?.lines) && parsed.lines.length > 0) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPendingDraft(parsed);
+      }
+    } catch {}
+  }, [editId]);
+
+  const resumeDraft = () => {
+    const draft = pendingDraft;
+    if (!draft) return;
+    if (typeof draft.clientId === "string") setClientId(draft.clientId);
+    if (Array.isArray(draft.lines)) setLines(draft.lines);
+    if (typeof draft.validDays === "number") setValidDays(draft.validDays);
+    if (typeof draft.payment === "string") {
+      setPayment(draft.payment);
+      setPaymentIsCustom(!PAYMENT_PRESETS.includes(draft.payment));
+    }
+    if (typeof draft.delivery === "string") setDelivery(draft.delivery);
+    if (typeof draft.seller === "string") setSeller(draft.seller);
+    if (typeof draft.freight === "string") setFreight(draft.freight);
+    if (typeof draft.notes === "string") setNotes(draft.notes);
+    if (typeof draft.quoteNumber === "string") setQuoteNumber(draft.quoteNumber);
+    setPendingDraft(null);
+  };
+
+  const discardDraft = () => {
+    localStorage.removeItem("quotationWorkingDraft");
+    setPendingDraft(null);
+  };
 
   useEffect(() => {
     if (editId || savedId) return;
@@ -609,6 +669,31 @@ function Builder() {
           </button>
         </div>
       </header>
+      {pendingDraft && lines.length === 0 && (
+        <div className="print-hidden flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+          <span className="flex-1">
+            Há uma cotação não finalizada
+            {pendingDraft.savedAt
+              ? ` de ${new Date(pendingDraft.savedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+              : ""}
+            . Deseja retomar?
+          </span>
+          <button
+            type="button"
+            onClick={resumeDraft}
+            className="brand-button inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold"
+          >
+            Retomar cotação
+          </button>
+          <button
+            type="button"
+            onClick={discardDraft}
+            className="brand-secondary inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold"
+          >
+            Descartar
+          </button>
+        </div>
+      )}
       {notice && (
         <div className="print-hidden rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
           {notice}

@@ -31,19 +31,27 @@ export function AppUXProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [toasts, setToasts] = useState<Array<{ id: number; message: string; kind: ToastKind }>>([]);
-  const [confirmation, setConfirmation] = useState<(ConfirmOptions & { resolve: (value: boolean) => void }) | null>(null);
+  const [confirmation, setConfirmation] = useState<ConfirmOptions | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  // The pending confirm() resolver lives in a ref, not in state, so closing the
+  // dialog resolves the promise outside the setState updater (pure updater).
+  const confirmResolver = useRef<((value: boolean) => void) | null>(null);
 
   const toast = useCallback((message: string, kind: ToastKind = "success") => {
     const id = Date.now() + Math.random();
     setToasts((current) => [...current, { id, message, kind }]);
     window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 4200);
   }, []);
-  const confirm = useCallback((options: ConfirmOptions) => new Promise<boolean>((resolve) => setConfirmation({ ...options, resolve })), []);
+  const confirm = useCallback((options: ConfirmOptions) => new Promise<boolean>((resolve) => {
+    confirmResolver.current = resolve;
+    setConfirmation(options);
+  }), []);
   const closeConfirmation = useCallback((result: boolean) => {
-    setConfirmation((current) => { current?.resolve(result); return null; });
+    setConfirmation(null);
+    confirmResolver.current?.(result);
+    confirmResolver.current = null;
   }, []);
 
   useEffect(() => {
