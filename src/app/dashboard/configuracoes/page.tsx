@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { FileImage, Mail, RefreshCw, Save, Upload } from "lucide-react";
+import { FileImage, FolderOpen, Mail, RefreshCw, Save, Upload } from "lucide-react";
 
 type EmailForm = {
   email: string;
@@ -21,6 +21,7 @@ export default function SettingsPage() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateNotice, setUpdateNotice] = useState("");
   const [updateError, setUpdateError] = useState("");
+  const [dataFolder, setDataFolder] = useState("");
   const [emailForm, setEmailForm] = useState<EmailForm>({
     email: "",
     appPassword: "",
@@ -34,6 +35,12 @@ export default function SettingsPage() {
       .getLetterhead()
       .then((current) => {
         if (current) setFile(current.fileName);
+      })
+      .catch(() => {});
+    window.halexDesktop?.settings
+      .getDataFolder()
+      .then((folder) => {
+        if (folder) setDataFolder(folder);
       })
       .catch(() => {});
     window.halexDesktop?.settings
@@ -96,6 +103,15 @@ export default function SettingsPage() {
       setTestingEmail(false);
     }
   }
+  async function openDataFolder() {
+    await window.halexDesktop?.settings.openDataFolder().catch(() => {});
+  }
+  async function changeDataFolder() {
+    const folder = await window.halexDesktop?.settings
+      .chooseDataFolder()
+      .catch(() => "");
+    if (folder) setDataFolder(folder);
+  }
   async function checkForUpdates() {
     setCheckingUpdate(true);
     setUpdateNotice("");
@@ -136,6 +152,42 @@ export default function SettingsPage() {
         </div>
         {updateError && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{updateError}</p>}
         {updateNotice && <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{updateNotice}</p>}
+      </section>
+      <section className="glass-card max-w-3xl p-6">
+        <div className="flex items-center gap-3">
+          <div className="metric-icon">
+            <FolderOpen size={18} />
+          </div>
+          <div>
+            <h2 className="font-semibold">Pasta dos arquivos</h2>
+            <p className="mt-1 text-xs text-stone-500">
+              Suas cotações em PDF, a planilha de clientes e os backups ficam
+              organizados nesta pasta. Os dados também permanecem seguros dentro
+              do aplicativo, então apagar a pasta não perde informação.
+            </p>
+          </div>
+        </div>
+        {dataFolder && (
+          <p className="mt-4 break-all rounded-lg bg-stone-50 p-3 font-mono text-xs text-stone-600">
+            {dataFolder}
+          </p>
+        )}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void openDataFolder()}
+            className="brand-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-bold"
+          >
+            <FolderOpen size={15} /> Abrir pasta
+          </button>
+          <button
+            type="button"
+            onClick={() => void changeDataFolder()}
+            className="brand-secondary inline-flex items-center gap-2 px-4 py-2 text-sm font-bold"
+          >
+            Alterar local
+          </button>
+        </div>
       </section>
       <section className="glass-card max-w-3xl p-6">
         <div className="flex items-center gap-3">

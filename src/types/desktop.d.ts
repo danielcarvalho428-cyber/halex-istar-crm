@@ -78,7 +78,7 @@ interface HalexDesktopApi {
     get(id: string): Promise<DesktopQuotation | null>;
     delete(id: string): Promise<boolean>;
     save(value: DesktopQuotation): Promise<string>;
-    pdf(quoteNumber: string): Promise<string | null>;
+    pdf(quoteNumber: string, clientName?: string): Promise<string | null>;
   };
   agreements: {
     list(): Promise<DesktopAgreementGroup[]>;
@@ -130,6 +130,9 @@ interface HalexDesktopApi {
     }): Promise<boolean>;
     chooseEmailLogos(): Promise<string[] | null>;
     testEmail(): Promise<boolean>;
+    getDataFolder(): Promise<string>;
+    openDataFolder(): Promise<string>;
+    chooseDataFolder(): Promise<string>;
   };
   billing: {
     parseReportPdf(data: ArrayBuffer): Promise<string>;

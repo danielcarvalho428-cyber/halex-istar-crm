@@ -527,7 +527,10 @@ function Builder() {
         await window.halexDesktop.quotations.save(newQuote);
         setSavedId(id);
         setNotice("Cotação salva no computador.");
-        if (generatePdf) await window.halexDesktop.quotations.pdf(quoteNumber);
+        if (generatePdf) {
+          await window.halexDesktop.quotations.pdf(quoteNumber, client.name);
+          setNotice("Cotação salva e PDF gerado na pasta Cotações.");
+        }
       } else {
         let manualQuotations: Array<StoredQuote | typeof newQuote> = [];
         try {

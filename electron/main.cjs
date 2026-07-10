@@ -22,7 +22,6 @@ const { LocalDatabase } = require("./database.cjs");
 const defaultReferenceData = require("./defaults/reference-data.json");
 const { normalizeHeader, field, numberValue, productRows, salesPriceTableFromSheets } = require("./product-import.cjs");
 const { parseNfePdfIdentity } = require("./nfe-document.cjs");
-const { autoUpdater } = require("electron-updater");
 
 let mainWindow;
 let nextServer;
@@ -30,6 +29,81 @@ let database;
 const billingAttachments = new Map();
 const preferredPort = 3210;
 let updateCheckTimer;
+
+// --- Visible data folder --------------------------------------------------
+// The live SQLite database stays in userData (protected from accidental
+// deletion). This browsable folder — on the Desktop by default — holds copies
+// the user may want to open directly: generated quotation PDFs, an up-to-date
+// clients spreadsheet, and automatic dated backups. Deleting this folder never
+// costs data; the database and its backups remain intact.
+function documentsRoot() {
+  const custom = database.getSetting("documents_folder");
+  return custom && custom.trim()
+    ? custom
+    : path.join(app.getPath("desktop"), "Halex Istar CRM");
+}
+function documentsSub(name) {
+  return path.join(documentsRoot(), name);
+}
+function ensureDocumentsFolders() {
+  for (const sub of ["Cotações", "Clientes", "Backups"]) {
+    fs.mkdirSync(documentsSub(sub), { recursive: true });
+  }
+}
+function sanitizeFileName(value) {
+  // Drop characters Windows forbids in filenames; keep spaces and hyphens.
+  return String(value || "")
+    .replace(/[<>:"/\\|?*]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function exportClientsSpreadsheet() {
+  try {
+    ensureDocumentsFolders();
+    const XLSX = loadXlsx();
+    const rows = database.listClients().map((c) => ({
+      "Código": c.code || "",
+      "Cliente": c.name || "",
+      "CNPJ/CPF": c.document || "",
+      "Cidade": c.city || "",
+      "UF": c.state || "",
+      "Contato": c.contact || "",
+      "Telefone": c.phone || "",
+      "E-mail": c.email || "",
+      "Última compra": c.last_purchase || "",
+      "Ciclo (dias)": c.average_cycle_days || "",
+      "Próxima compra": c.next_purchase || "",
+      "Total 12 meses": Number(c.total_12m || 0),
+      "Carteira": c.carteira || "",
+      "Tipo": c.client_type || "",
+    }));
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, "Clientes");
+    XLSX.writeFile(book, path.join(documentsSub("Clientes"), "Clientes.xlsx"));
+  } catch (error) {
+    console.error("Falha ao exportar planilha de clientes:", error);
+  }
+}
+function runDailyBackup() {
+  try {
+    ensureDocumentsFolders();
+    const dir = documentsSub("Backups");
+    const today = new Date().toISOString().slice(0, 10);
+    const target = path.join(dir, `halex-istar-${today}.sqlite`);
+    if (!fs.existsSync(target)) fs.copyFileSync(database.filePath, target);
+    // Keep the 14 most recent daily backups.
+    const backups = fs
+      .readdirSync(dir)
+      .filter((f) => /^halex-istar-\d{4}-\d{2}-\d{2}\.sqlite$/.test(f))
+      .sort();
+    for (const old of backups.slice(0, Math.max(0, backups.length - 14))) {
+      fs.rmSync(path.join(dir, old), { force: true });
+    }
+  } catch (error) {
+    console.error("Falha ao criar backup automático:", error);
+  }
+}
 
 function installDefaultLetterhead() {
   if (database.getSetting("letterhead_path")) return;
@@ -44,6 +118,9 @@ function configureAutoUpdates() {
   // Electron's macOS updater requires a code-signed application. Until the
   // Mac build is signed, users install new DMGs manually.
   if (!app.isPackaged || process.platform === "darwin") return;
+  // Loaded lazily (and only in a packaged build): requiring electron-updater
+  // eagerly at module load instantiates the updater before the app is ready.
+  const { autoUpdater } = require("electron-updater");
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
@@ -263,10 +340,16 @@ function emailHistory() {
 function registerIpc() {
   ipcMain.handle("db:clients:list", () => database.listClients());
   ipcMain.handle("db:clients:get", (_event, id) => database.getClient(id));
-  ipcMain.handle("db:clients:delete", (_event, id) => database.deleteClient(id));
-  ipcMain.handle("db:clients:save", (_event, value) =>
-    database.saveClient(value),
-  );
+  ipcMain.handle("db:clients:delete", (_event, id) => {
+    const result = database.deleteClient(id);
+    exportClientsSpreadsheet();
+    return result;
+  });
+  ipcMain.handle("db:clients:save", (_event, value) => {
+    const result = database.saveClient(value);
+    exportClientsSpreadsheet();
+    return result;
+  });
   ipcMain.handle("db:products:list", () => database.listProducts());
   ipcMain.handle("db:products:save", (_event, value) =>
     database.saveProduct(value),
@@ -346,6 +429,7 @@ function registerIpc() {
     if (!app.isPackaged || process.platform === "darwin") {
       return { currentVersion, latestVersion: currentVersion, available: false };
     }
+    const { autoUpdater } = require("electron-updater");
     const result = await autoUpdater.checkForUpdates();
     const latestVersion = result?.updateInfo?.version || currentVersion;
     return {
@@ -630,12 +714,7 @@ function registerIpc() {
     await database.open();
     return true;
   });
-  ipcMain.handle("document:pdf", async (_event, quoteNumber) => {
-    const result = await dialog.showSaveDialog(mainWindow, {
-      defaultPath: `${String(quoteNumber).replace(/[^a-z0-9-]/gi, "_")}.pdf`,
-      filters: [{ name: "PDF", extensions: ["pdf"] }],
-    });
-    if (result.canceled || !result.filePath) return null;
+  ipcMain.handle("document:pdf", async (_event, quoteNumber, clientName) => {
     const renderedPageCount = await mainWindow.webContents
       .executeJavaScript(
         "document.querySelectorAll('.print-document .quotation-page').length",
@@ -651,8 +730,36 @@ function registerIpc() {
       margins: { top: 0, bottom: 0, left: 0, right: 0 },
       pageRanges: pageCount === 1 ? "1" : `1-${pageCount}`,
     });
-    fs.writeFileSync(result.filePath, data);
-    return result.filePath;
+    // Auto-file the PDF into the visible Cotações folder, named by quote + client.
+    ensureDocumentsFolders();
+    const base =
+      [sanitizeFileName(quoteNumber), sanitizeFileName(clientName)]
+        .filter(Boolean)
+        .join(" - ") || "cotacao";
+    const target = path.join(documentsSub("Cotações"), `${base}.pdf`);
+    fs.writeFileSync(target, data);
+    shell.openPath(target).catch(() => {});
+    return target;
+  });
+
+  ipcMain.handle("settings:documents:get", () => documentsRoot());
+  ipcMain.handle("settings:documents:open", async () => {
+    ensureDocumentsFolders();
+    await shell.openPath(documentsRoot());
+    return documentsRoot();
+  });
+  ipcMain.handle("settings:documents:choose", async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ["openDirectory", "createDirectory"],
+      title: "Escolha onde guardar a pasta Halex Istar CRM",
+    });
+    if (result.canceled || !result.filePaths[0]) return documentsRoot();
+    const chosen = path.join(result.filePaths[0], "Halex Istar CRM");
+    database.setSetting("documents_folder", chosen);
+    ensureDocumentsFolders();
+    runDailyBackup();
+    exportClientsSpreadsheet();
+    return documentsRoot();
   });
 }
 
@@ -721,6 +828,13 @@ app.whenReady().then(async () => {
   );
   await database.open();
   installDefaultLetterhead();
+  try {
+    ensureDocumentsFolders();
+    runDailyBackup();
+    exportClientsSpreadsheet();
+  } catch (error) {
+    console.error("Falha ao preparar a pasta de documentos:", error);
+  }
   registerIpc();
   await createWindow();
   configureAutoUpdates();

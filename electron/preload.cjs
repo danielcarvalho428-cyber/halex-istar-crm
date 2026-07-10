@@ -17,7 +17,8 @@ contextBridge.exposeInMainWorld("halexDesktop", {
     get: (id) => ipcRenderer.invoke("db:quotations:get", id),
     delete: (id) => ipcRenderer.invoke("db:quotations:delete", id),
     save: (value) => ipcRenderer.invoke("db:quotations:save", value),
-    pdf: (quoteNumber) => ipcRenderer.invoke("document:pdf", quoteNumber),
+    pdf: (quoteNumber, clientName) =>
+      ipcRenderer.invoke("document:pdf", quoteNumber, clientName),
   },
   agreements: {
     list: () => ipcRenderer.invoke("agreements:list"),
@@ -41,6 +42,9 @@ contextBridge.exposeInMainWorld("halexDesktop", {
     saveEmail: (value) => ipcRenderer.invoke("settings:email:save", value),
     chooseEmailLogos: () => ipcRenderer.invoke("settings:email:logos"),
     testEmail: () => ipcRenderer.invoke("settings:email:test"),
+    getDataFolder: () => ipcRenderer.invoke("settings:documents:get"),
+    openDataFolder: () => ipcRenderer.invoke("settings:documents:open"),
+    chooseDataFolder: () => ipcRenderer.invoke("settings:documents:choose"),
   },
   billing: {
     parseReportPdf: (data) => ipcRenderer.invoke("billing:report:pdf", data),
