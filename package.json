@@ -20,7 +20,8 @@
     "build:desktop": "npm run lint && npm run test && node scripts/build-desktop.cjs",
     "desktop:installer": "npm run build:desktop && npm run desktop:prepare && electron-builder --win nsis",
     "desktop:installer:mac": "npm run build:desktop && npm run desktop:prepare && electron-builder --mac dmg zip --x64 --arm64 --publish never",
-    "desktop:release": "npm run build:desktop && npm run desktop:prepare && electron-builder --win nsis --publish always"
+    "desktop:release": "npm run build:desktop && npm run desktop:prepare && node scripts/publish-release.cjs",
+    "desktop:release:repair": "node scripts/publish-release.cjs"
   },
   "dependencies": {
     "@tesseract.js-data/eng": "^1.0.0",
