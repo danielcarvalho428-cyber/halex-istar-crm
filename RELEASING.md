@@ -1,4 +1,4 @@
-# Publicação do Halex Istar CRM
+# Publicação do Lumina Prisma
 
 ## Gerar o instalador
 
@@ -25,19 +25,19 @@ Enquanto não houver certificado Authenticode, o Windows poderá mostrar “Edit
 O workflow **Build macOS installers** gera instaladores para Macs Intel (`x64`) e Apple Silicon (`arm64`) sem exigir um Mac local. Ele pode ser iniciado manualmente na aba **Actions** do GitHub ou automaticamente ao publicar uma tag `v*`.
 
 1. Abra **Actions > Build macOS installers > Run workflow**.
-2. Quando o processo terminar, abra a execução e baixe o artefato **Halex-Istar-CRM-macOS**.
+2. Quando o processo terminar, abra a execução e baixe o artefato **Lumina-Prisma-macOS**.
 3. Distribua o `.dmg` correspondente: `arm64` para Macs com chips Apple e `x64` para Macs Intel.
 
 Como o aplicativo ainda não é assinado ou notarizado, o macOS exibirá um aviso na primeira abertura:
 
-1. Arraste **Halex Istar CRM** para **Aplicativos**.
+1. Arraste **Lumina Prisma** para **Aplicativos**.
 2. No Finder, abra **Aplicativos**, clique no aplicativo com o botão direito (ou Control + clique) e escolha **Abrir**.
 3. Confirme **Abrir**. Se essa opção não aparecer, acesse **Ajustes do Sistema > Privacidade e Segurança** e escolha **Abrir Mesmo Assim**.
 
 Se o macOS disser que o aplicativo está “danificado” mesmo após a confirmação, remova apenas a quarentena deste aplicativo pelo Terminal:
 
 ```bash
-xattr -dr com.apple.quarantine "/Applications/Halex Istar CRM.app"
+xattr -dr com.apple.quarantine "/Applications/Lumina Prisma.app"
 ```
 
 Baixe o aplicativo somente da distribuição oficial. Não é necessário desativar o Gatekeeper globalmente. As atualizações automáticas ficam desativadas no macOS até que exista assinatura; instale uma nova versão baixando o DMG mais recente. Os dados locais permanecem na pasta de usuário do macOS.

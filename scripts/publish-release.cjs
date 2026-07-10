@@ -32,7 +32,7 @@ if (!publish.owner || !publish.repo) {
 }
 const repo = `${publish.owner}/${publish.repo}`;
 const releaseDir = path.join(root, "release");
-const exeName = `Halex-Istar-CRM-Setup-${version}.exe`;
+const exeName = `Lumina-Prisma-Setup-${version}.exe`;
 
 // gh is a native executable, so run it without a shell and pass args as an
 // array (no string concatenation -> no injection surface, no DEP0190 warning).
@@ -61,7 +61,7 @@ const ghRepo = ["-R", repo];
 const exists = spawnSync("gh", ["release", "view", tag, ...ghRepo], { stdio: "ignore", env });
 if (exists.status !== 0) {
   console.log(`Pre-creating release ${tag} on ${repo}...`);
-  const created = run("gh", ["release", "create", tag, ...ghRepo, "-t", version, "-n", `Halex Istar CRM ${version}`], { env });
+  const created = run("gh", ["release", "create", tag, ...ghRepo, "-t", `Lumina Prisma ${version}`, "-n", `Lumina Prisma ${version}`], { env });
   if (created.status !== 0) {
     console.error("Failed to pre-create the release.");
     process.exit(1);
