@@ -12,7 +12,7 @@ export default function GlobalError({
         <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
           <section style={{ maxWidth: 520, textAlign: 'center' }}>
             <p style={{ color: '#b36f12', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-              Halex Istar CRM
+              Lumina Prisma
             </p>
             <h1>Algo deu errado</h1>
             <p>Recarregue esta área. Nenhuma alteração foi concluída durante o erro.</p>

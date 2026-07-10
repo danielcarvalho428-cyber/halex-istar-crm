@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import type { AccountRole } from "../../types";
 import CompanyFooter from "../../components/CompanyFooter";
+import { AppUXProvider, QuickSearchButton } from "../../components/AppUX";
+import { LuminaProductIdentity } from "../../components/LuminaIdentity";
 
 interface SidebarLinkProps {
   href: string;
@@ -195,7 +197,7 @@ export default function DashboardLayout({
     </nav>
   );
 
-  return (
+  return <AppUXProvider>
     <div className="product-shell relative flex min-h-screen">
       <aside className="side-rail hidden w-[252px] shrink-0 flex-col gap-7 px-5 py-6 lg:flex">
         <div className="relative z-10 flex items-start justify-between gap-3">
@@ -249,35 +251,18 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <main className="workspace-canvas mx-auto w-full max-w-[1480px] flex-1 overflow-y-auto p-4 animate-fade-in sm:p-7 lg:px-10 lg:py-9 xl:px-12">
+        <div className="hidden justify-end px-10 pt-5 lg:flex"><QuickSearchButton /></div>
+        <main id="conteudo-principal" tabIndex={-1} className="workspace-canvas mx-auto w-full max-w-[1480px] flex-1 overflow-y-auto p-4 animate-fade-in sm:p-7 lg:px-10 lg:py-9 xl:px-12">
           {children}
         </main>
         <CompanyFooter className="mx-auto w-full max-w-[1480px] px-4 pb-5 sm:px-7 lg:px-10 xl:px-12" />
       </div>
     </div>
-  );
+  </AppUXProvider>;
 }
 
 function BrandHeader({ compact = false }: { compact?: boolean }) {
-  return (
-    <div className="mb-2 flex items-center gap-2">
-      <div
-        className={`${compact ? "h-8 w-8" : "h-10 w-10"} brand-mark flex items-center justify-center rounded-lg text-sm font-black`}
-      >
-        HI
-      </div>
-      <div>
-        <p className="text-base font-semibold leading-none text-white">
-          Halex Istar CRM
-        </p>
-        {!compact && (
-          <span className="mt-1 block text-[9px] font-bold uppercase tracking-[0.2em] text-amber-400">
-            Clientes e cotações
-          </span>
-        )}
-      </div>
-    </div>
-  );
+  return <LuminaProductIdentity compact={compact} />;
 }
 
 function SidebarFooter({

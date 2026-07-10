@@ -1,8 +1,8 @@
 {
   "name": "halex-istar-crm",
-  "version": "0.2.26",
+  "version": "0.2.27",
   "type": "module",
-  "description": "CRM offline para clientes privados e cotações Halex Istar",
+  "description": "Inteligência comercial para hospitais e distribuidores",
   "author": "Daniel Carvalho",
   "private": true,
   "main": "electron/main.cjs",
@@ -62,7 +62,7 @@
   },
   "build": {
     "appId": "br.com.halexistar.crm",
-    "productName": "Halex Istar CRM",
+    "productName": "Lumina Prisma",
     "asar": true,
     "directories": {
       "output": "release"
@@ -84,7 +84,7 @@
     "win": {
       "target": "nsis",
       "icon": "src/app/favicon.ico",
-      "artifactName": "Halex-Istar-CRM-Setup-${version}.${ext}",
+      "artifactName": "Lumina-Prisma-Setup-${version}.${ext}",
       "publish": {
         "provider": "github",
         "owner": "danielcarvalho428-cyber",
@@ -98,12 +98,12 @@
         "zip"
       ],
       "category": "public.app-category.business",
-      "artifactName": "Halex-Istar-CRM-${version}-${arch}.${ext}",
+      "artifactName": "Lumina-Prisma-${version}-${arch}.${ext}",
       "identity": null,
       "hardenedRuntime": false
     },
     "dmg": {
-      "title": "Halex Istar CRM ${version}",
+      "title": "Lumina Prisma ${version}",
       "sign": false
     },
     "nsis": {

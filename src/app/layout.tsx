@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "./prisma.css";
 import { LicenseGate } from "@/components/LicenseGate";
 
-const geistSans = Geist({
+const inter = Inter({
   variable: "--font-geist-sans",
   subsets: ["latin"],
 });
@@ -15,10 +16,10 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Halex Istar CRM",
-    template: "%s | Halex Istar CRM",
+    default: "Lumina Prisma",
+    template: "%s | Lumina Prisma",
   },
-  description: "CRM de clientes privados e geração inteligente de cotações",
+  description: "Inteligência comercial para hospitais e distribuidores",
 };
 
 export default function RootLayout({
@@ -29,7 +30,7 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <LicenseGate>{children}</LicenseGate>

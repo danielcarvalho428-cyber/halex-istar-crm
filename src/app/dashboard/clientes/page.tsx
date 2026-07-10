@@ -4,20 +4,24 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { FilePlus2, Search, UserRoundCheck, MapPin, UserCircle2, Pencil, Trash2 } from "lucide-react";
 import { appDate, money } from "@/lib/crm-preview";
-import { useDesktopClients } from "@/lib/use-desktop-data";
+import { notifyCrmDataChanged, useDesktopClients } from "@/lib/use-desktop-data";
+import { useAppUX } from "@/components/AppUX";
 
 export default function ClientsPage() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("Todos");
+  const [sort, setSort] = useState("prioridade");
+  const { confirm, toast } = useAppUX();
   const allClients = useDesktopClients();
   const clients = useMemo(
     () =>
-      allClients.filter((client) =>
+      allClients.filter((client) => (status === "Todos" || client.status === status) &&
         `${client.name} ${client.code} ${client.city} ${client.contact}`
           .toLowerCase()
           .includes(query.toLowerCase()),
-      ),
-    [allClients, query],
+      ).sort((a, b) => sort === "nome" ? a.name.localeCompare(b.name) : sort === "potencial" ? b.total12m - a.total12m : a.nextPurchase.localeCompare(b.nextPurchase)),
+    [allClients, query, sort, status],
   );
   return (
     <div className="space-y-6">
@@ -41,6 +45,7 @@ export default function ClientsPage() {
           placeholder="Buscar cliente, código, cidade ou contato"
         />
       </div>
+      <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-stone-500">{clients.length} de {allClients.length} clientes</span><select aria-label="Filtrar por status" className="form-input ml-auto text-xs" value={status} onChange={(e) => setStatus(e.target.value)}><option>Todos</option><option>Comprar agora</option><option>Contato próximo</option><option>Em ciclo</option></select><select aria-label="Ordenar clientes" className="form-input text-xs" value={sort} onChange={(e) => setSort(e.target.value)}><option value="prioridade">Prioridade</option><option value="nome">Nome</option><option value="potencial">Maior potencial</option></select></div>
           <Link href="/dashboard/clientes/novo" className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold mb-4">
             <FilePlus2 size={14} />
             Adicionar cliente
@@ -107,7 +112,7 @@ export default function ClientsPage() {
               <div className="flex flex-wrap gap-2">
                 <Link href={`/dashboard/clientes/novo?editId=${client.id}`} className="brand-secondary inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold"><Pencil size={14} />Editar</Link>
                 <button type="button" onClick={async () => {
-                  if (!confirm(`Excluir o cliente ${client.name}?`)) return;
+                  if (!await confirm({ title: `Excluir ${client.name}?`, description: "O cliente será removido da carteira. Cotações históricas protegidas serão mantidas.", confirmLabel: "Excluir cliente", destructive: true })) return;
                   setError("");
                   try {
                     if (window.halexDesktop) await window.halexDesktop.clients.delete(client.id);
@@ -115,7 +120,7 @@ export default function ClientsPage() {
                       const stored = JSON.parse(localStorage.getItem("manualClients") || "[]") as Array<{ id: string }>;
                       localStorage.setItem("manualClients", JSON.stringify(stored.filter((item) => item.id !== client.id)));
                     }
-                    window.location.reload();
+                    notifyCrmDataChanged(); toast("Cliente excluído da carteira.");
                   } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível excluir o cliente."); }
                 }} className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-50"><Trash2 size={14} />Excluir</button>
                 <Link href={`/dashboard/cotacoes/nova?cliente=${client.id}`} className="brand-button inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold"><FilePlus2 size={14} />Criar cotação</Link>

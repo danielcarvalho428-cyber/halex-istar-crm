@@ -1,4 +1,4 @@
-# Halex Istar CRM
+# Lumina Prisma
 
 CRM desktop para gestão de clientes privados, ciclos comerciais, faturamento e geração de cotações.
 

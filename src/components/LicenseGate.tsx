@@ -151,7 +151,7 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
             <div>
               <Wordmark className="text-base" />
               <p className="lx-gold-deep mt-0.5 text-[9px] font-bold uppercase tracking-[0.2em]">
-                Halex Istar CRM
+                Lumina Prisma
               </p>
             </div>
           </div>
@@ -167,7 +167,7 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
             <div className="lx-hairline mb-6 lg:mb-8" aria-hidden="true" />
             <p className="lx-kicker mb-3">Licença · Assinatura</p>
             <h1 className="lx-ink max-w-2xl text-4xl font-semibold leading-[0.98] tracking-[-0.045em] sm:text-5xl xl:text-6xl">
-              Ative o Halex Istar CRM.
+              Ative o Lumina Prisma.
             </h1>
             <p className="lx-ink-2 mt-4 max-w-xl text-sm leading-6 sm:text-base sm:leading-7">
               Escolha um plano, assine em instantes e receba sua chave de ativação por e-mail e na
@@ -287,7 +287,7 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
                   className="lx-input font-mono"
-                  placeholder="EX: HALEX-A1B2C3D4-E5F6G7H8"
+                  placeholder="EX: PRISMA-A1B2C3D4-E5F6G7H8"
                 />
               </label>
 
@@ -319,7 +319,7 @@ export function LicenseGate({ children }: { children: React.ReactNode }) {
         <footer className="lx-ink-3 relative z-10 mx-auto mt-2 w-full max-w-[1440px] border-t border-black/10 pt-4 text-[11px]">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Wordmark className="text-xs" />
-            <span>© {new Date().getFullYear()} Almeida Lumina · Halex Istar CRM</span>
+            <span>© {new Date().getFullYear()} Almeida Lumina · Lumina Prisma</span>
           </div>
         </footer>
       </div>

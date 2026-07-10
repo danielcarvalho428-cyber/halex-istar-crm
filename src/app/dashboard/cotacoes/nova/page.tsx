@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { FileDown, Plus, Printer, Search, Trash2 } from "lucide-react";
+import { useAppUX } from "@/components/AppUX";
 import {
   appDate,
   money,
@@ -96,6 +97,9 @@ function Builder() {
   const agreements = useDesktopAgreements();
   const letterhead = useDesktopLetterhead();
   const importedSalesPriceTable = useDesktopSalesPriceTable();
+  const { toast } = useAppUX();
+  const [saving, setSaving] = useState(false);
+  const [lastDraftAt, setLastDraftAt] = useState<Date | null>(null);
   const [clientId, setClientId] = useState(
     params.get("cliente") || previewClients[0].id,
   );
@@ -136,6 +140,22 @@ function Builder() {
   // PDF" after "Salvar") updates the same row instead of colliding on the
   // UNIQUE quote_number.
   const [savedId, setSavedId] = useState<string | null>(editId);
+
+  useEffect(() => {
+    if (editId || lines.length === 0) return;
+    const timer = window.setTimeout(() => {
+      localStorage.setItem("quotationWorkingDraft", JSON.stringify({ clientId, lines, validDays, payment, delivery, seller, freight, notes, quoteNumber, savedAt: new Date().toISOString() }));
+      setLastDraftAt(new Date());
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [clientId, delivery, editId, freight, lines, notes, payment, quoteNumber, seller, validDays]);
+
+  useEffect(() => {
+    if (lines.length === 0 || savedId) return;
+    const protectDraft = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", protectDraft);
+    return () => window.removeEventListener("beforeunload", protectDraft);
+  }, [lines.length, savedId]);
 
   useEffect(() => {
     if (editId || savedId) return;
@@ -522,6 +542,7 @@ function Builder() {
       items,
     };
 
+    setSaving(true);
     try {
       if (window.halexDesktop) {
         await window.halexDesktop.quotations.save(newQuote);
@@ -545,8 +566,13 @@ function Builder() {
         setNotice("Cotação salva localmente com sucesso.");
         if (generatePdf) window.print();
       }
+      localStorage.removeItem("quotationWorkingDraft");
+      toast(generatePdf ? "Cotação salva e PDF preparado." : "Cotação salva com segurança.");
     } catch {
       setNotice("Não foi possível salvar a cotação. Tente novamente.");
+      toast("Não foi possível salvar a cotação.", "error");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -560,19 +586,22 @@ function Builder() {
             Escolha o cliente e os produtos. O documento é calculado e montado
             automaticamente.
           </p>
+          <p className="mt-2 text-xs font-semibold text-stone-400" aria-live="polite">{saving ? "Salvando…" : savedId ? "Salva neste computador" : lastDraftAt ? `Rascunho automático · ${lastDraftAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "Rascunho será salvo automaticamente"}</p>
         </div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => void saveQuotation(false)}
+            disabled={saving || lines.length === 0}
             className="brand-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-bold"
           >
             <Printer size={15} />
-            Salvar
+            {saving ? "Salvando…" : "Salvar"}
           </button>
           <button
             type="button"
             onClick={() => void saveQuotation(true)}
+            disabled={saving || lines.length === 0}
             className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold"
           >
             <FileDown size={15} />
@@ -767,6 +796,7 @@ function Builder() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar código ou produto"
+                onKeyDown={(event) => { if (event.key === "Enter" && filtered[0]) { event.preventDefault(); add(filtered[0].id); } }}
               />
             </div>
             <div className="mt-3 divide-y divide-stone-100">

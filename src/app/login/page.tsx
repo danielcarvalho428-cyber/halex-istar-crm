@@ -3,6 +3,7 @@
 import React, { FormEvent, useState } from 'react';
 import { ArrowRight, CalendarClock, FileText, LockKeyhole, ShieldCheck, Users } from 'lucide-react';
 import CompanyFooter from '../../components/CompanyFooter';
+import { LuminaProductIdentity } from '../../components/LuminaIdentity';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -40,17 +41,7 @@ export default function LoginPage() {
   return (
     <div className="login-shell relative flex min-h-[100svh] flex-1 flex-col overflow-x-hidden px-4 py-5 sm:px-7 md:py-7">
       <header className="relative z-10 mx-auto flex w-full max-w-[1440px] items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="brand-mark flex h-10 w-10 items-center justify-center rounded-lg text-sm font-black">
-            HI
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-white">Halex Istar CRM</p>
-            <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.2em] text-amber-400">
-              Clientes e cotações
-            </p>
-          </div>
-        </div>
+        <LuminaProductIdentity />
         <div className="hidden items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400 sm:flex">
           <ShieldCheck size={14} className="text-amber-400" />
           <span>Acesso protegido</span>

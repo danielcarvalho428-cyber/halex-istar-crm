@@ -15,7 +15,7 @@ export default function CompanyFooter({
     <footer className={`company-footer ${dark ? 'company-footer-dark' : ''} ${className}`}>
       <div className="company-footer-inner">
         <div>
-          <p className="company-footer-product">Halex Istar CRM</p>
+          <p className="company-footer-product">Lumina Prisma</p>
           <p className="company-footer-legal">
             Software desenvolvido por Almeida Lumina Ltda{" "}
             <span aria-hidden="true">·</span> CNPJ 66.399.756/0001-63

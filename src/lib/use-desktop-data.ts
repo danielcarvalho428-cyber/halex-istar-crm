@@ -5,6 +5,11 @@ import type { CrmClient, CrmProduct } from "./crm-preview";
 import { previewClients, previewProducts } from "./crm-preview";
 import { localIsoDate } from "./date";
 
+export const CRM_DATA_CHANGED_EVENT = "halex:crm-data-changed";
+export function notifyCrmDataChanged() {
+  window.dispatchEvent(new CustomEvent(CRM_DATA_CHANGED_EVENT));
+}
+
 function readJsonArray<T>(key: string): T[] {
   try {
     const raw = localStorage.getItem(key);
@@ -67,21 +72,18 @@ export function useDesktopClients() {
   const [clients, setClients] = useState<CrmClient[]>([]);
 
   useEffect(() => {
-    const manualClients = readJsonArray<CrmClient>("manualClients");
+    const load = () => {
+      const manualClients = readJsonArray<CrmClient>("manualClients");
 
-    if (window.halexDesktop?.clients) {
-      window.halexDesktop.clients
-        .list()
-        .then((rows) => {
-          const desktopClients = rows.map(clientFromRow);
-          setClients([...manualClients, ...desktopClients]);
-        })
-        .catch(() => {
-          setClients([...manualClients, ...previewClients]);
-        });
-    } else {
-      queueMicrotask(() => setClients([...manualClients, ...previewClients]));
-    }
+      if (window.halexDesktop?.clients) {
+        window.halexDesktop.clients.list().then((rows) => {
+          setClients([...manualClients, ...rows.map(clientFromRow)]);
+        }).catch(() => setClients([...manualClients, ...previewClients]));
+      } else queueMicrotask(() => setClients([...manualClients, ...previewClients]));
+    };
+    load();
+    window.addEventListener(CRM_DATA_CHANGED_EVENT, load);
+    return () => window.removeEventListener(CRM_DATA_CHANGED_EVENT, load);
   }, []);
 
   return clients;
@@ -95,9 +97,7 @@ export function useDesktopProducts() {
         .list()
         .then((rows) => setProducts(rows.map(productFromRow)))
         .catch(() => setProducts([]));
-    } else {
-      queueMicrotask(() => setProducts(previewProducts));
-    }
+    } else queueMicrotask(() => setProducts(previewProducts));
   }, []);
   return products;
 }
@@ -105,16 +105,16 @@ export function useDesktopProducts() {
 export function useDesktopQuotations() {
   const [quotations, setQuotations] = useState<DesktopQuotation[]>([]);
   useEffect(() => {
-    const manualQuotations = readJsonArray<DesktopQuotation>("manualQuotations");
+    const load = () => {
+      const manualQuotations = readJsonArray<DesktopQuotation>("manualQuotations");
 
-    if (window.halexDesktop?.quotations) {
-      window.halexDesktop.quotations
-        .list()
-        .then((rows) => setQuotations([...manualQuotations, ...rows]))
-        .catch(() => setQuotations(manualQuotations));
-    } else {
-      queueMicrotask(() => setQuotations(manualQuotations));
-    }
+      if (window.halexDesktop?.quotations) {
+        window.halexDesktop.quotations.list().then((rows) => setQuotations([...manualQuotations, ...rows])).catch(() => setQuotations(manualQuotations));
+      } else queueMicrotask(() => setQuotations(manualQuotations));
+    };
+    load();
+    window.addEventListener(CRM_DATA_CHANGED_EVENT, load);
+    return () => window.removeEventListener(CRM_DATA_CHANGED_EVENT, load);
   }, []);
   return quotations;
 }

@@ -21,8 +21,8 @@ export default function DashboardPage() {
     <div className="space-y-7">
       <header className="page-hero flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="lumina-kicker">Carteira privada</p>
-          <h1 className="mt-2">Operação comercial</h1>
+          <p className="lumina-kicker">Lumina Prisma · Hoje</p>
+          <h1 className="mt-2">Inteligência comercial<br/><span className="gold-text">em movimento.</span></h1>
           <p className="mt-2 max-w-2xl text-sm text-stone-500">Priorize clientes pelo ciclo real de compra e transforme o contato em uma cotação pronta.</p>
         </div>
         <Link href="/dashboard/cotacoes/nova" className="brand-button inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold">
@@ -32,15 +32,15 @@ export default function DashboardPage() {
 
       <section className="metric-strip grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          ['Clientes ativos', clients.length, <Building2 key="clients" size={18} />],
-          ['Comprar agora', immediate.length, <CalendarClock key="cycle" size={18} />],
-          ['Cotações no mês', monthlyQuotes, <ReceiptText key="quotes" size={18} />],
-          ['Potencial da carteira', money(clients.reduce((sum, item) => sum + item.total12m, 0)), <TrendingUp key="potential" size={18} />],
-        ].map(([label, value, icon]) => (
-          <div key={String(label)} className="metric-item flex items-center justify-between p-5">
+          ['Clientes ativos', clients.length, <Building2 key="clients" size={18} />, '/dashboard/clientes'],
+          ['Comprar agora', immediate.length, <CalendarClock key="cycle" size={18} />, '/dashboard/agenda'],
+          ['Cotações no mês', monthlyQuotes, <ReceiptText key="quotes" size={18} />, '/dashboard/cotacoes'],
+          ['Potencial da carteira', money(clients.reduce((sum, item) => sum + item.total12m, 0)), <TrendingUp key="potential" size={18} />, '/dashboard/clientes'],
+        ].map(([label, value, icon, href]) => (
+          <Link href={String(href)} key={String(label)} className="metric-item flex items-center justify-between p-5">
             <div><p className="text-[10px] font-bold uppercase text-stone-500">{String(label)}</p><p className="mt-2 text-2xl font-semibold">{String(value)}</p></div>
             <div className="metric-icon">{icon}</div>
-          </div>
+          </Link>
         ))}
       </section>
 

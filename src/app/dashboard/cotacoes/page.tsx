@@ -1,18 +1,24 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { FilePlus2, ReceiptText, Pencil, Trash2 } from "lucide-react";
+import { FilePlus2, ReceiptText, Pencil, Trash2, Search } from "lucide-react";
+import { useMemo, useState } from "react";
 import { money } from "@/lib/crm-preview";
-import { useDesktopQuotations } from "@/lib/use-desktop-data";
+import { notifyCrmDataChanged, useDesktopQuotations } from "@/lib/use-desktop-data";
+import { useAppUX } from "@/components/AppUX";
 
 export default function QuotationsPage() {
   const quotations = useDesktopQuotations();
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState("recentes");
+  const { confirm, toast } = useAppUX();
+  const visible = useMemo(() => quotations.filter((quote) => `${quote.quote_number} ${quote.client_name}`.toLowerCase().includes(query.toLowerCase())).sort((a, b) => sort === "valor" ? Number(b.total_value) - Number(a.total_value) : String(b.issued_at).localeCompare(String(a.issued_at))), [quotations, query, sort]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Tem certeza que deseja excluir esta cotação?")) return;
+    if (!await confirm({ title: "Excluir esta cotação?", description: "A proposta deixará de aparecer no histórico deste computador.", confirmLabel: "Excluir cotação", destructive: true })) return;
     if (window.halexDesktop) {
       await window.halexDesktop.quotations.delete(id);
-      window.location.reload();
+      notifyCrmDataChanged(); toast("Cotação excluída.");
       return;
     }
     const manualStored = localStorage.getItem("manualQuotations");
@@ -20,7 +26,7 @@ export default function QuotationsPage() {
       const parsed: DesktopQuotation[] = JSON.parse(manualStored);
       const updated = parsed.filter((quote) => String(quote.id) !== id);
       localStorage.setItem("manualQuotations", JSON.stringify(updated));
-      window.location.reload();
+      notifyCrmDataChanged(); toast("Cotação excluída.");
     }
   };
   return (
@@ -41,8 +47,9 @@ export default function QuotationsPage() {
           Nova cotação
         </Link>
       </header>
+      <div className="glass-panel flex flex-col gap-3 p-4 sm:flex-row sm:items-center"><label className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={15}/><span className="sr-only">Buscar cotações</span><input className="form-input input-with-icon w-full" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar número ou cliente"/></label><span className="text-xs text-stone-500">{visible.length} resultado(s)</span><select aria-label="Ordenar cotações" className="form-input text-xs" value={sort} onChange={(e) => setSort(e.target.value)}><option value="recentes">Mais recentes</option><option value="valor">Maior valor</option></select></div>
       <section className="glass-card overflow-hidden">
-        {quotations.length === 0 ? (
+        {visible.length === 0 ? (
           <div className="p-10 text-center">
             <ReceiptText className="mx-auto text-amber-700" size={32} />
             <h2 className="mt-3 font-semibold">Nenhuma cotação salva</h2>
@@ -65,7 +72,7 @@ export default function QuotationsPage() {
                 </tr>
               </thead>
               <tbody>
-                {quotations.map((quote) => (
+                {visible.map((quote) => (
                   <tr key={String(quote.id)}>
                     <td className="px-4 py-4 font-mono text-xs font-bold">
                       {String(quote.quote_number)}
@@ -92,6 +99,7 @@ export default function QuotationsPage() {
                           href={`/dashboard/cotacoes/nova?editId=${quote.id}`}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900"
                           title="Editar"
+                          aria-label={`Editar cotação ${quote.quote_number}`}
                         >
                           <Pencil size={14} />
                         </Link>
@@ -100,6 +108,7 @@ export default function QuotationsPage() {
                           onClick={() => void handleDelete(String(quote.id))}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-500 hover:bg-red-50 hover:text-red-700"
                           title="Excluir"
+                          aria-label={`Excluir cotação ${quote.quote_number}`}
                         >
                           <Trash2 size={14} />
                         </button>

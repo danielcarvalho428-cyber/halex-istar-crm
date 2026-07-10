@@ -38,9 +38,9 @@ let updateCheckTimer;
 // costs data; the database and its backups remain intact.
 function documentsRoot() {
   const custom = database.getSetting("documents_folder");
-  return custom && custom.trim()
-    ? custom
-    : path.join(app.getPath("desktop"), "Halex Istar CRM");
+  if (custom && custom.trim()) return custom;
+  const legacy = path.join(app.getPath("desktop"), "Halex Istar CRM");
+  return fs.existsSync(legacy) ? legacy : path.join(app.getPath("desktop"), "Lumina Prisma");
 }
 function documentsSub(name) {
   return path.join(documentsRoot(), name);
@@ -128,7 +128,7 @@ function configureAutoUpdates() {
     const choice = await dialog.showMessageBox(mainWindow, {
       type: "info",
       title: "Atualização disponível",
-      message: `A versão ${info.version} do Halex Istar CRM está disponível.`,
+      message: `A versão ${info.version} do Lumina Prisma está disponível.`,
       detail: "Seus dados locais serão preservados durante a atualização.",
       buttons: ["Baixar atualização", "Depois"],
       defaultId: 0,
@@ -698,7 +698,7 @@ function registerIpc() {
   ipcMain.handle("backup:create", async () => {
     const result = await dialog.showSaveDialog(mainWindow, {
       defaultPath: `halex-istar-backup-${new Date().toISOString().slice(0, 10)}.sqlite`,
-      filters: [{ name: "Backup Halex Istar", extensions: ["sqlite"] }],
+      filters: [{ name: "Backup Lumina Prisma", extensions: ["sqlite"] }],
     });
     if (result.canceled || !result.filePath) return null;
     fs.copyFileSync(database.filePath, result.filePath);
@@ -707,7 +707,7 @@ function registerIpc() {
   ipcMain.handle("backup:restore", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openFile"],
-      filters: [{ name: "Backup Halex Istar", extensions: ["sqlite"] }],
+      filters: [{ name: "Backup Lumina Prisma", extensions: ["sqlite"] }],
     });
     if (result.canceled) return false;
     fs.copyFileSync(result.filePaths[0], database.filePath);
@@ -751,10 +751,10 @@ function registerIpc() {
   ipcMain.handle("settings:documents:choose", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openDirectory", "createDirectory"],
-      title: "Escolha onde guardar a pasta Halex Istar CRM",
+      title: "Escolha onde guardar a pasta Lumina Prisma",
     });
     if (result.canceled || !result.filePaths[0]) return documentsRoot();
-    const chosen = path.join(result.filePaths[0], "Halex Istar CRM");
+    const chosen = path.join(result.filePaths[0], "Lumina Prisma");
     database.setSetting("documents_folder", chosen);
     ensureDocumentsFolders();
     runDailyBackup();
@@ -804,11 +804,11 @@ async function createWindow() {
     console.error("Failed to load URL:", err);
     // Don't leave a permanently blank window — show a readable error instead.
     const detail = (err instanceof Error ? err.message : String(err)).replace(/</g, "&lt;");
-    const errorPage = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Halex Istar CRM</title></head>`
+    const errorPage = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Lumina Prisma</title></head>`
       + `<body style="font-family:system-ui,'Segoe UI',sans-serif;background:#f4f6f8;color:#1c1917;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">`
       + `<div style="max-width:520px;padding:32px;text-align:center">`
       + `<h1 style="font-size:20px;margin:0 0 12px">Não foi possível iniciar o aplicativo</h1>`
-      + `<p style="font-size:14px;color:#57534e;line-height:1.6">O servidor interno não respondeu. Feche outras instâncias do Halex Istar CRM e abra novamente. Se o problema persistir, reinicie o computador.</p>`
+      + `<p style="font-size:14px;color:#57534e;line-height:1.6">O servidor interno não respondeu. Feche outras instâncias do Lumina Prisma e abra novamente. Se o problema persistir, reinicie o computador.</p>`
       + `<p style="font-size:12px;color:#a8a29e;margin-top:16px">Detalhe técnico: ${detail}</p>`
       + `</div></body></html>`;
     try {
