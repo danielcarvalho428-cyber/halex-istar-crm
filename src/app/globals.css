@@ -845,7 +845,7 @@ select.form-input {
 
 /* Custom transitions */
 .animate-fade-in {
-  animation: fadeIn 0.4s ease-out forwards;
+  animation: fadeIn 0.22s ease-out forwards;
 }
 
 @keyframes fadeIn {
@@ -877,8 +877,19 @@ select.form-input {
   --line: rgba(23, 32, 51, 0.09);
 }
 
+/* Solid body + a single fixed background layer. `background-attachment: fixed`
+   forces a full-viewport repaint on every scroll frame (janky on long tables);
+   a fixed, composited pseudo-element gives the identical look with no repaint. */
 body {
-  background-color: #f4f6f8;
+  background: #f4f6f8;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background-image:
     radial-gradient(
       circle at 78% -12%,
@@ -886,7 +897,6 @@ body {
       transparent 30rem
     ),
     linear-gradient(180deg, #f7f8fa 0%, #f1f3f6 100%);
-  background-attachment: fixed;
 }
 
 .product-shell {
@@ -912,6 +922,7 @@ body {
     0 10px 28px -22px rgba(15, 23, 42, 0.26);
 }
 
+.glass-panel,
 .glass-card {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -1076,6 +1087,13 @@ body {
   box-shadow: 0 0 0 3px rgba(212, 147, 46, 0.12);
 }
 
+/* Inputs with a leading (absolutely-positioned) icon. The compound selector
+   outranks the plain .form-input padding shorthand, so the text/placeholder
+   clears the icon instead of sliding underneath it. */
+.form-input.input-with-icon {
+  padding-left: 2.5rem;
+}
+
 .date-filter-input {
   color-scheme: light;
   min-height: 3.15rem;
@@ -1221,6 +1239,8 @@ table tbody tr:hover {
 
 .mobile-topbar {
   background: rgba(19, 28, 43, 0.97);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .presentation-shell {

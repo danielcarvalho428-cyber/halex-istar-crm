@@ -53,7 +53,6 @@ export default function DashboardLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [role, setRole] = useState<AccountRole>("viewer");
   const [displayName, setDisplayName] = useState("");
-  const isPresentation = pathname === "/dashboard/apresentacao";
 
   React.useEffect(() => {
     if (window.halexDesktop) {
@@ -195,10 +194,6 @@ export default function DashboardLayout({
       ))}
     </nav>
   );
-
-  if (isPresentation) {
-    return <main className="min-h-screen">{children}</main>;
-  }
 
   return (
     <div className="product-shell relative flex min-h-screen">

@@ -760,7 +760,7 @@ function Builder() {
                 size={15}
               />
               <input
-                className="form-input w-full pl-9"
+                className="form-input input-with-icon w-full"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar código ou produto"

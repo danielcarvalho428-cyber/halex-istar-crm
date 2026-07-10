@@ -10,12 +10,14 @@ const { fork } = require("node:child_process");
 const fs = require("node:fs");
 const net = require("node:net");
 const path = require("node:path");
-const XLSX = require("xlsx");
-const nodemailer = require("nodemailer");
-const { PDFParse } = require("pdf-parse");
-const { createWorker } = require("tesseract.js");
-const portugueseOcr = require("@tesseract.js-data/por");
 const crypto = require("node:crypto");
+
+// Heavy, on-demand modules (spreadsheet parsing, email, PDF/OCR). Loading these
+// at startup added multiple megabytes (tesseract.js ships WASM + language data)
+// to the boot path even though they're only touched by import/email/DANFE
+// actions. Load them lazily — Node caches the module, so repeat calls are free.
+let _xlsx = null;
+const loadXlsx = () => (_xlsx ??= require("xlsx"));
 const { LocalDatabase } = require("./database.cjs");
 const defaultReferenceData = require("./defaults/reference-data.json");
 const { normalizeHeader, field, numberValue, productRows, salesPriceTableFromSheets } = require("./product-import.cjs");
@@ -79,7 +81,7 @@ function configureAutoUpdates() {
 
 function dateValue(value) {
   if (!value) return null;
-  if (typeof value === "number") return XLSX.SSF.format("yyyy-mm-dd", value);
+  if (typeof value === "number") return loadXlsx().SSF.format("yyyy-mm-dd", value);
   const text = String(value).trim();
   const br = text.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
   if (br)
@@ -87,16 +89,16 @@ function dateValue(value) {
   return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : null;
 }
 function spreadsheetRows(filePath) {
-  const workbook = XLSX.readFile(filePath, { cellDates: false });
+  const workbook = loadXlsx().readFile(filePath, { cellDates: false });
   return workbook.SheetNames.flatMap((name) =>
-    XLSX.utils.sheet_to_json(workbook.Sheets[name], { defval: "", raw: true }),
+    loadXlsx().utils.sheet_to_json(workbook.Sheets[name], { defval: "", raw: true }),
   );
 }
 function spreadsheetSheets(filePath) {
-  const workbook = XLSX.readFile(filePath, { cellDates: false });
+  const workbook = loadXlsx().readFile(filePath, { cellDates: false });
   return workbook.SheetNames.map((name) => ({
     name,
-    rows: XLSX.utils.sheet_to_json(workbook.Sheets[name], {
+    rows: loadXlsx().utils.sheet_to_json(workbook.Sheets[name], {
       header: 1,
       defval: "",
       raw: true,
@@ -227,6 +229,7 @@ function readEmailConfig() {
 }
 
 function gmailTransport() {
+  const nodemailer = require("nodemailer");
   const config = readEmailConfig();
   return {
     config,
@@ -489,6 +492,7 @@ function registerIpc() {
       const fileName = path.basename(filePath);
       const size = fs.statSync(filePath).size;
       try {
+        const { PDFParse } = require("pdf-parse");
         const parser = new PDFParse({ data: fs.readFileSync(filePath) });
         const parsed = await parser.getText();
         await parser.destroy();
@@ -523,6 +527,7 @@ function registerIpc() {
     if (!data.length || data.length > 30 * 1024 * 1024) {
       throw new Error("O relatório PDF deve ter no máximo 30 MB.");
     }
+    const { PDFParse } = require("pdf-parse");
     const parser = new PDFParse({ data });
     let worker;
     try {
@@ -534,6 +539,8 @@ function registerIpc() {
         imageDataUrl: false,
       });
       if (screenshots.pages.length > 20) throw new Error("O relatório possui mais de 20 páginas.");
+      const { createWorker } = require("tesseract.js");
+      const portugueseOcr = require("@tesseract.js-data/por");
       worker = await createWorker("por", 1, {
         langPath: portugueseOcr.langPath,
         gzip: portugueseOcr.gzip,

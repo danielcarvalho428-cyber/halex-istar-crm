@@ -35,7 +35,7 @@ export default function ClientsPage() {
           size={16}
         />
         <input
-          className="form-input w-full pl-10"
+          className="form-input input-with-icon w-full"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Buscar cliente, código, cidade ou contato"

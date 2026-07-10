@@ -278,7 +278,7 @@ export default function BillingFollowUpPage() {
             <div className="flex flex-col gap-3 border-b border-stone-200 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div><h2 className="font-semibold">3. Conferir e enviar</h2><p className="mt-1 text-xs text-stone-500">Revise destinatário e mensagem antes de cada envio.</p></div>
               <div className="flex gap-2">
-                <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="NF, pedido ou cliente" className="form-input w-60 pl-9 text-xs" /></div>
+                <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="NF, pedido ou cliente" className="form-input input-with-icon w-60 text-xs" /></div>
                 <button type="button" onClick={() => void copyInvoiceNumbers()} className="brand-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-bold">{copied ? <Check size={14} /> : <Clipboard size={14} />}{copied ? "Copiado" : "Copiar NFs"}</button>
               </div>
             </div>

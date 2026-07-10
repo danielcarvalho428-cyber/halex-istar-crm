@@ -32,7 +32,7 @@ export default function CatalogPage() {
           size={16}
         />
         <input
-          className="form-input w-full pl-10"
+          className="form-input input-with-icon w-full"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Buscar código, produto ou apresentação"
