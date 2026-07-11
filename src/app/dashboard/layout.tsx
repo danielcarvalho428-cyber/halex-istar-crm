@@ -17,6 +17,7 @@ import {
   PackageSearch,
   ReceiptText,
   Settings,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import type { AccountRole } from "../../types";
@@ -55,6 +56,17 @@ export default function DashboardLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [role, setRole] = useState<AccountRole>("viewer");
   const [displayName, setDisplayName] = useState("");
+  const [simplified, setSimplified] = useState(false);
+
+  React.useEffect(() => {
+    queueMicrotask(() => setSimplified(localStorage.getItem("luminaSimplifiedMode") === "true"));
+  }, []);
+
+  const toggleSimplified = () => setSimplified((current) => {
+    const next = !current;
+    localStorage.setItem("luminaSimplifiedMode", String(next));
+    return next;
+  });
 
   React.useEffect(() => {
     if (window.halexDesktop) {
@@ -82,7 +94,7 @@ export default function DashboardLayout({
   };
 
   const isAdmin = role === "admin";
-  const menuGroups = [
+  const fullMenuGroups = [
     {
       label: "Comercial",
       items: [
@@ -163,6 +175,13 @@ export default function DashboardLayout({
         ]
       : []),
   ];
+  const menuGroups = simplified ? [{ label: "Essencial", items: [
+    { href: "/dashboard", icon: <LayoutDashboard size={17} />, label: "Início" },
+    { href: "/dashboard/clientes", icon: <Building2 size={17} />, label: "Clientes" },
+    { href: "/dashboard/agenda", icon: <CalendarClock size={17} />, label: "Agenda" },
+    { href: "/dashboard/cotacoes/nova", icon: <FilePlus2 size={17} />, label: "Nova cotação" },
+    { href: "/dashboard/cotacoes", icon: <ReceiptText size={17} />, label: "Cotações" },
+  ] }] : fullMenuGroups;
 
   const nav = (
     <nav
@@ -197,7 +216,7 @@ export default function DashboardLayout({
     </nav>
   );
 
-  return <AppUXProvider>
+  return <AppUXProvider simplified={simplified}>
     <div className="product-shell relative flex min-h-screen">
       <aside className="side-rail hidden w-[252px] shrink-0 flex-col gap-7 px-5 py-6 lg:flex">
         <div className="relative z-10 flex items-start justify-between gap-3">
@@ -208,6 +227,8 @@ export default function DashboardLayout({
           role={role}
           displayName={displayName}
           onLogout={handleLogout}
+          simplified={simplified}
+          onToggleSimplified={toggleSimplified}
         />
       </aside>
 
@@ -230,6 +251,8 @@ export default function DashboardLayout({
               role={role}
               displayName={displayName}
               onLogout={handleLogout}
+              simplified={simplified}
+              onToggleSimplified={toggleSimplified}
             />
           </aside>
         </div>
@@ -269,10 +292,14 @@ function SidebarFooter({
   role,
   displayName,
   onLogout,
+  simplified,
+  onToggleSimplified,
 }: {
   role: AccountRole;
   displayName: string;
   onLogout: () => void;
+  simplified: boolean;
+  onToggleSimplified: () => void;
 }) {
   return (
     <div className="relative z-10 mt-auto flex flex-col gap-4 border-t border-white/8 pt-5">
@@ -285,6 +312,11 @@ function SidebarFooter({
           {role === "admin" ? "Administrador" : "Visualização"}
         </p>
       </div>
+      <button type="button" onClick={onToggleSimplified} aria-pressed={simplified} className="sidebar-mode-toggle">
+        <SlidersHorizontal size={14} />
+        <span><strong>{simplified ? "Modo simplificado" : "Modo completo"}</strong><small>{simplified ? "Somente funções essenciais" : "Administração disponível"}</small></span>
+        <span className={`mode-switch ${simplified ? "on" : ""}`} aria-hidden="true"><i /></span>
+      </button>
       <button
         type="button"
         onClick={onLogout}

@@ -27,7 +27,7 @@ const commands = [
   ["Configurações", "/dashboard/configuracoes", "email papel timbrado"],
 ] as const;
 
-export function AppUXProvider({ children }: { children: React.ReactNode }) {
+export function AppUXProvider({ children, simplified = false }: { children: React.ReactNode; simplified?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const [toasts, setToasts] = useState<Array<{ id: number; message: string; kind: ToastKind }>>([]);
@@ -68,8 +68,9 @@ export function AppUXProvider({ children }: { children: React.ReactNode }) {
 
   const matches = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("pt-BR");
-    return commands.filter(([label, , keywords]) => `${label} ${keywords}`.toLocaleLowerCase("pt-BR").includes(needle));
-  }, [query]);
+    const essential = ["/dashboard", "/dashboard/clientes", "/dashboard/agenda", "/dashboard/cotacoes/nova", "/dashboard/cotacoes"];
+    return commands.filter(([, href]) => !simplified || essential.includes(href)).filter(([label, , keywords]) => `${label} ${keywords}`.toLocaleLowerCase("pt-BR").includes(needle));
+  }, [query, simplified]);
   const navigate = (href: string) => { setPaletteOpen(false); setQuery(""); router.push(href); };
 
   return <UXContext.Provider value={{ toast, confirm, openCommandPalette: () => setPaletteOpen(true) }}>
