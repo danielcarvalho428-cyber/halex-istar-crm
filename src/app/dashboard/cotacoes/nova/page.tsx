@@ -701,8 +701,19 @@ function Builder() {
     const multiBrand = brands.length > 1;
     const base = savedId || `manual-${Date.now()}`;
     const baseSuffix = quoteNumber.replace(/^(HI|MC)-/, "");
+    // When splitting an existing quote into two brands, the brand matching the
+    // original quote_number keeps the original row (id + number) so we update it
+    // in place; the added brand gets a fresh id and number. Otherwise the reused
+    // number would collide with the still-existing original row (quote_number is
+    // UNIQUE) and the save would fail.
+    const originalPrefix = editId ? (quoteNumber.match(/^(HI|MC)-/)?.[1] ?? "HI") : null;
     const buildQuote = (brand: BillingBrand) => {
       const identity = BRAND_IDENTITY[brand];
+      const recordId = multiBrand
+        ? (originalPrefix && identity.prefix === originalPrefix
+            ? base
+            : `${base}-${identity.prefix.toLowerCase()}`)
+        : base;
       const brandLines = lines.filter((line) => lineBrand(line) === brand);
       const items = brandLines.map((line) => {
         const product = products.find((item) => item.id === line.productId)!;
@@ -726,7 +737,7 @@ function Builder() {
       return {
         number: `${identity.prefix}-${baseSuffix}`,
         record: {
-          id: multiBrand ? `${base}-${identity.prefix.toLowerCase()}` : base,
+          id: recordId,
           client_name: client.name,
           quote_number: `${identity.prefix}-${baseSuffix}`,
           client_id: client.id,
