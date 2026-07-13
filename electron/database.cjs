@@ -185,6 +185,7 @@ class LocalDatabase {
     this.cleanupFalseManualPurchaseDates();
     this.repairKnownProductData();
     this.reconcileActiveTable();
+    this.reactivateMediconeProducts();
     if (this.seedDemoData) this.seed();
     if (this.referenceData) this.seedReferenceData(this.referenceData);
     this.persist();
@@ -221,8 +222,33 @@ class LocalDatabase {
     }
     if (!codes.length) return;
     const placeholders = codes.map(() => "?").join(",");
+    // Scope to non-Medicone products: this reconciliation only concerns the Halex
+    // sales table, so Medicone products (a parallel table) must stay active.
     this.db.run(
-      `UPDATE products SET active = 0 WHERE code NOT IN (${placeholders})`,
+      `UPDATE products SET active = 0 WHERE code NOT IN (${placeholders}) AND brand <> 'Medicone'`,
+      codes,
+    );
+  }
+
+  // Self-heal databases where an earlier Halex reconciliation deactivated the
+  // Medicone products: reactivate every product listed in the active Medicone
+  // table so both catalogs remain available in the quote builder.
+  reactivateMediconeProducts() {
+    const raw = this.getSetting("active_sales_price_table_medicone");
+    if (!raw) return;
+    let codes = [];
+    try {
+      const table = JSON.parse(raw);
+      codes = Array.isArray(table?.products)
+        ? table.products.map((product) => String(product.code)).filter(Boolean)
+        : [];
+    } catch {
+      return;
+    }
+    if (!codes.length) return;
+    const placeholders = codes.map(() => "?").join(",");
+    this.db.run(
+      `UPDATE products SET active = 1 WHERE brand = 'Medicone' AND code IN (${placeholders})`,
       codes,
     );
   }
@@ -750,7 +776,9 @@ class LocalDatabase {
         "UPDATE price_table_versions SET active = CASE WHEN id = ? THEN 1 ELSE 0 END",
         [versionId],
       );
-      this.db.run("UPDATE products SET active = 0, updated_at = ?", [now]);
+      // Leave Medicone products active — this catalog version only replaces the
+      // Halex/default price source.
+      this.db.run("UPDATE products SET active = 0, updated_at = ? WHERE brand <> 'Medicone'", [now]);
       for (const value of rows) {
         const existing = this.rows("SELECT id FROM products WHERE code = ?", [
           value.code,

@@ -209,6 +209,41 @@ test("keeps the Halex and Medicone sales tables independent and both products ac
   });
 });
 
+test("keeps Medicone products active after reopening (Halex reconciliation)", async () => {
+  const file = path.join(os.tmpdir(), `halex-medicone-reopen-${randomUUID()}.sqlite`);
+  const database = new LocalDatabase(file);
+  await database.open();
+  try {
+    database.importSalesPriceTable({
+      name: "Halex", period: "08.2026",
+      regions: [{ value: "co", label: "CO" }],
+      categories: [{ value: "hospital", label: "Hospital" }],
+      products: [{ code: "HALEX1", description: "Soro" }],
+      prices: { co: { hospital: { HALEX1: 5 } } },
+      invalidPrices: 0, fallbackPrices: 0,
+    }, "Halex Istar");
+    database.importMediconeTable({
+      name: "Medicone", period: "Tabela Medicone",
+      regions: [{ value: "default", label: "Única" }],
+      categories: [{ value: "hospital", label: "Hospital" }, { value: "distribuidor", label: "Distribuidor" }],
+      products: [{ code: "MED1", description: "Luva", presentation: "LUVAS", packSize: 1 }],
+      prices: { default: { hospital: { MED1: 9 }, distribuidor: { MED1: 8 } } },
+      tiers: { hospital: {}, distribuidor: {} },
+      invalidPrices: 0, fallbackPrices: 0,
+    });
+
+    // Reopen: reconcileActiveTable() runs against the Halex table and used to
+    // deactivate everything not in it; reactivateMediconeProducts() must restore.
+    const reopened = new LocalDatabase(file);
+    await reopened.open();
+    const active = reopened.listProducts();
+    assert.ok(active.find((p) => p.code === "HALEX1"), "Halex product active");
+    assert.ok(active.find((p) => p.code === "MED1"), "Medicone product still active after reopen");
+  } finally {
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  }
+});
+
 test("moves a client between agreement groups and stores special prices", async () => {
   await withDatabase((database) => {
     const first = database.saveAgreementGroup({ name: "Rede A" });
