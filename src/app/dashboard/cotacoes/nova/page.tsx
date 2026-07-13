@@ -61,6 +61,7 @@ type QuoteDraft = {
   freight?: string;
   notes?: string;
   quoteNumber?: string;
+  minBilling?: Record<string, string>;
   savedAt?: string;
 };
 
@@ -87,6 +88,7 @@ type StoredQuote = {
   delivery_terms?: string;
   freight_terms?: string;
   notes?: string;
+  minimum_billing?: number;
   issued_at?: string;
   valid_until?: string;
   items?: StoredQuoteItem[];
@@ -157,6 +159,12 @@ function Builder() {
   const [payment, setPayment] = useState("30/45/60 Dias");
   const [paymentIsCustom, setPaymentIsCustom] = useState(false);
   const [hidePrices, setHidePrices] = useState(false);
+  // Faturamento mínimo per invoicing brand (display strings), printed on that
+  // brand's document. Each split cotação carries its own value.
+  const [minBilling, setMinBilling] = useState<Record<BillingBrand, string>>({
+    "Halex Istar": "",
+    Medicone: "",
+  });
   const [delivery, setDelivery] = useState(
     "Até 10 dias úteis após confirmação",
   );
@@ -195,11 +203,11 @@ function Builder() {
   useEffect(() => {
     if (editId || lines.length === 0) return;
     const timer = window.setTimeout(() => {
-      localStorage.setItem("quotationWorkingDraft", JSON.stringify({ clientId, lines, validDays, payment, delivery, seller, freight, notes, quoteNumber, savedAt: new Date().toISOString() }));
+      localStorage.setItem("quotationWorkingDraft", JSON.stringify({ clientId, lines, validDays, payment, delivery, seller, freight, notes, quoteNumber, minBilling, savedAt: new Date().toISOString() }));
       setLastDraftAt(new Date());
     }, 650);
     return () => window.clearTimeout(timer);
-  }, [clientId, delivery, editId, freight, lines, notes, payment, quoteNumber, seller, validDays]);
+  }, [clientId, delivery, editId, freight, lines, minBilling, notes, payment, quoteNumber, seller, validDays]);
 
   useEffect(() => {
     if (lines.length === 0 || savedId) return;
@@ -243,6 +251,12 @@ function Builder() {
     if (typeof draft.freight === "string") setFreight(draft.freight);
     if (typeof draft.notes === "string") setNotes(draft.notes);
     if (typeof draft.quoteNumber === "string") setQuoteNumber(draft.quoteNumber);
+    if (draft.minBilling && typeof draft.minBilling === "object") {
+      setMinBilling((current) => ({
+        "Halex Istar": draft.minBilling?.["Halex Istar"] ?? current["Halex Istar"],
+        Medicone: draft.minBilling?.Medicone ?? current.Medicone,
+      }));
+    }
     setPendingDraft(null);
   };
 
@@ -336,6 +350,15 @@ function Builder() {
               quote.freight_terms || "CIF - incluso no valor da proposta",
             );
             setNotes(quote.notes || "");
+            if (quote.minimum_billing != null && Number(quote.minimum_billing) > 0) {
+              const loadedBrand: BillingBrand = quote.quote_number?.startsWith("MC-")
+                ? "Medicone"
+                : "Halex Istar";
+              setMinBilling((current) => ({
+                ...current,
+                [loadedBrand]: formatQuotationPriceInput(Number(quote.minimum_billing)),
+              }));
+            }
 
             if (quote.issued_at && quote.valid_until) {
               const issuedDate = new Date(`${quote.issued_at}T12:00:00`);
@@ -558,6 +581,7 @@ function Builder() {
   const activeLetterhead =
     activeBrand === "Medicone" ? mediconeLetterhead : letterhead;
   const brandIdentity = BRAND_IDENTITY[activeBrand];
+  const activeMinBilling = parseQuotationPriceInput(minBilling[activeBrand]);
   const totalForLine = (line: QuoteLine) => {
     const product = productById.get(line.productId);
     if (!product) return 0;
@@ -754,6 +778,7 @@ function Builder() {
           delivery_terms: delivery,
           freight_terms: freight,
           notes,
+          minimum_billing: parseQuotationPriceInput(minBilling[brand]) || null,
           total_value: brandTotal,
           items,
         },
@@ -1018,6 +1043,25 @@ function Builder() {
                   onChange={(e) => setFreight(e.target.value)}
                 />
               </label>
+              {(brandsInQuote.length ? brandsInQuote : (["Halex Istar"] as BillingBrand[])).map((brand) => (
+                <label key={brand} className="text-xs font-bold">
+                  {brandsInQuote.length > 1 ? `Faturamento mínimo · ${brand}` : "Faturamento mínimo"}
+                  <div className="mt-2 flex items-center gap-1">
+                    <span className="text-stone-400">R$</span>
+                    <input
+                      className="form-input w-full"
+                      inputMode="decimal"
+                      placeholder="0,00"
+                      value={minBilling[brand]}
+                      onChange={(e) => setMinBilling((c) => ({ ...c, [brand]: e.target.value }))}
+                      onBlur={(e) => {
+                        const raw = e.target.value.trim();
+                        setMinBilling((c) => ({ ...c, [brand]: raw ? formatQuotationPriceInput(raw) : "" }));
+                      }}
+                    />
+                  </div>
+                </label>
+              ))}
               <label className="text-xs font-bold md:col-span-3">
                 Entrega
                 <input
@@ -1496,6 +1540,9 @@ function Builder() {
                         <div><dt>Pagamento</dt><dd>{payment}</dd></div>
                         <div><dt>Entrega</dt><dd>{delivery}</dd></div>
                         <div><dt>Frete</dt><dd>{freight}</dd></div>
+                        {activeMinBilling > 0 && (
+                          <div><dt>Faturamento mínimo</dt><dd>{money(activeMinBilling)}</dd></div>
+                        )}
                         <div><dt>Validade</dt><dd>Até {appDate(toDateInput(valid))} · {validDays} dias</dd></div>
                       </dl>
                     </section>

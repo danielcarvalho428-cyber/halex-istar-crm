@@ -180,6 +180,7 @@ class LocalDatabase {
     this.ensureColumn("quotations", "representative_email", "TEXT");
     this.ensureColumn("quotations", "sales_price_table", "TEXT");
     this.ensureColumn("quotations", "sales_price_region", "TEXT");
+    this.ensureColumn("quotations", "minimum_billing", "REAL");
     this.ensureColumn("agreement_groups", "price_table_name", "TEXT");
     this.ensureColumn("agreement_groups", "price_table_imported_at", "TEXT");
     this.cleanupFalseManualPurchaseDates();
@@ -1028,8 +1029,8 @@ class LocalDatabase {
     this.db.run("BEGIN");
     try {
       this.db.run(
-        `INSERT INTO quotations (id,quote_number,client_id,issued_at,valid_until,status,seller,representative_role,representative_phone,representative_email,sales_price_table,sales_price_region,payment_terms,delivery_terms,freight_terms,notes,total_value,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET quote_number=excluded.quote_number,client_id=excluded.client_id,issued_at=excluded.issued_at,valid_until=excluded.valid_until,status=excluded.status,seller=excluded.seller,representative_role=excluded.representative_role,representative_phone=excluded.representative_phone,representative_email=excluded.representative_email,sales_price_table=excluded.sales_price_table,sales_price_region=excluded.sales_price_region,payment_terms=excluded.payment_terms,delivery_terms=excluded.delivery_terms,freight_terms=excluded.freight_terms,notes=excluded.notes,total_value=excluded.total_value,updated_at=excluded.updated_at`,
+        `INSERT INTO quotations (id,quote_number,client_id,issued_at,valid_until,status,seller,representative_role,representative_phone,representative_email,sales_price_table,sales_price_region,payment_terms,delivery_terms,freight_terms,notes,total_value,minimum_billing,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET quote_number=excluded.quote_number,client_id=excluded.client_id,issued_at=excluded.issued_at,valid_until=excluded.valid_until,status=excluded.status,seller=excluded.seller,representative_role=excluded.representative_role,representative_phone=excluded.representative_phone,representative_email=excluded.representative_email,sales_price_table=excluded.sales_price_table,sales_price_region=excluded.sales_price_region,payment_terms=excluded.payment_terms,delivery_terms=excluded.delivery_terms,freight_terms=excluded.freight_terms,notes=excluded.notes,total_value=excluded.total_value,minimum_billing=excluded.minimum_billing,updated_at=excluded.updated_at`,
         [
           id,
           value.quote_number,
@@ -1048,6 +1049,7 @@ class LocalDatabase {
           value.freight_terms || null,
           value.notes || null,
           Number(value.total_value) || 0,
+          value.minimum_billing == null ? null : Number(value.minimum_billing),
           value.created_at || now,
           now,
         ],
