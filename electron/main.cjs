@@ -395,7 +395,7 @@ function registerIpc() {
       ),
     };
   });
-  ipcMain.handle("import:products", async () => {
+  async function importProductsForBrand(brand) {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openFile"],
       filters: [{ name: "Planilha", extensions: ["xlsx", "xls", "csv"] }],
@@ -411,7 +411,7 @@ function registerIpc() {
       return {
         fileName,
         kind: "sales-price-table",
-        ...database.importSalesPriceTable(salesTable),
+        ...database.importSalesPriceTable(salesTable, brand),
       };
     }
     return {
@@ -420,10 +420,18 @@ function registerIpc() {
       ...database.importPriceTable(
         productRows(spreadsheetRows(filePath)),
         fileName,
+        brand,
       ),
     };
-  });
+  }
+  ipcMain.handle("import:products", () => importProductsForBrand("Halex Istar"));
+  ipcMain.handle("import:products:medicone", () =>
+    importProductsForBrand("Medicone"),
+  );
   ipcMain.handle("sales-prices:active", () => database.getSalesPriceTable());
+  ipcMain.handle("sales-prices:active:medicone", () =>
+    database.getSalesPriceTable("Medicone"),
+  );
   ipcMain.handle("updates:check", async () => {
     const currentVersion = app.getVersion();
     if (!app.isPackaged || process.platform === "darwin") {
@@ -460,7 +468,11 @@ function registerIpc() {
   ipcMain.handle("prices:delete", (_event, versionId) =>
     database.deletePriceVersion(versionId),
   );
-  ipcMain.handle("settings:letterhead", async () => {
+  const letterheadSettingKey = (brand) =>
+    brand === "Medicone" ? "letterhead_medicone_path" : "letterhead_path";
+  const letterheadFilePrefix = (brand) =>
+    brand === "Medicone" ? "letterhead-medicone" : "letterhead";
+  ipcMain.handle("settings:letterhead", async (_event, brand) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openFile"],
       filters: [
@@ -471,14 +483,14 @@ function registerIpc() {
     const source = result.filePaths[0];
     const target = path.join(
       app.getPath("userData"),
-      `letterhead${path.extname(source).toLowerCase()}`,
+      `${letterheadFilePrefix(brand)}${path.extname(source).toLowerCase()}`,
     );
     fs.copyFileSync(source, target);
-    database.setSetting("letterhead_path", target);
+    database.setSetting(letterheadSettingKey(brand), target);
     return target;
   });
-  ipcMain.handle("settings:letterhead:get", () => {
-    const filePath = database.getSetting("letterhead_path");
+  ipcMain.handle("settings:letterhead:get", (_event, brand) => {
+    const filePath = database.getSetting(letterheadSettingKey(brand));
     if (!filePath || !fs.existsSync(filePath)) return null;
     const extension = path.extname(filePath).slice(1).toLowerCase();
     const mime =

@@ -105,8 +105,8 @@ interface HalexDesktopApi {
     } | null>;
   };
   settings: {
-    chooseLetterhead(): Promise<string | null>;
-    getLetterhead(): Promise<{
+    chooseLetterhead(brand?: "Halex Istar" | "Medicone"): Promise<string | null>;
+    getLetterhead(brand?: "Halex Istar" | "Medicone"): Promise<{
       fileName: string;
       mime: string;
       dataUrl: string | null;
@@ -183,6 +183,17 @@ interface HalexDesktopApi {
       fallbackPrices?: number;
       period?: string;
     } | null>;
+    productsMedicone(): Promise<{
+      fileName: string;
+      kind: "catalog" | "sales-price-table";
+      total: number;
+      imported: number;
+      ignored: number;
+      regions?: number;
+      categories?: number;
+      fallbackPrices?: number;
+      period?: string;
+    } | null>;
     clients(): Promise<{
       fileName: string;
       total: number;
@@ -203,6 +214,7 @@ interface HalexDesktopApi {
       activatedVersionId: string | null;
     }>;
     activeSalesPriceTable(): Promise<DesktopSalesPriceTable | null>;
+    activeSalesPriceTableMedicone(): Promise<DesktopSalesPriceTable | null>;
   };
   updates: {
     check(): Promise<{

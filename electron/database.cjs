@@ -506,7 +506,8 @@ class LocalDatabase {
     }
   }
 
-  importPriceTable(rows, name) {
+  importPriceTable(rows, name, brand = "Halex Istar") {
+    const isMedicone = brand === "Medicone";
     const validRows = rows.filter((value) => value.code && value.description);
     if (validRows.length === 0) {
       throw new Error(
@@ -519,26 +520,37 @@ class LocalDatabase {
     const ignored = rows.length - validRows.length;
     this.db.run("BEGIN");
     try {
-      // A newly imported catalog becomes the single active source, replacing any
-      // commercial (sales) table so the two systems never both claim "active".
-      this.db.run("DELETE FROM settings WHERE key = 'active_sales_price_table'");
-      this.db.run("UPDATE price_table_versions SET active = 0");
+      // A newly imported catalog becomes the active source for ITS brand,
+      // replacing that brand's commercial (sales) table so the two systems never
+      // both claim "active" for the same brand. The other brand is left intact.
+      this.db.run("DELETE FROM settings WHERE key = ?", [
+        isMedicone
+          ? "active_sales_price_table_medicone"
+          : "active_sales_price_table",
+      ]);
+      if (!isMedicone) this.db.run("UPDATE price_table_versions SET active = 0");
       this.db.run(
-        "INSERT INTO price_table_versions(id,name,imported_at,row_count,active) VALUES(?,?,?,?,1)",
-        [versionId, name, now, rows.length],
+        "INSERT INTO price_table_versions(id,name,imported_at,row_count,active) VALUES(?,?,?,?,?)",
+        [versionId, name, now, rows.length, isMedicone ? 0 : 1],
       );
-      this.db.run("UPDATE products SET active = 0, updated_at = ?", [now]);
+      this.db.run(
+        isMedicone
+          ? "UPDATE products SET active = 0, updated_at = ? WHERE brand = 'Medicone'"
+          : "UPDATE products SET active = 0, updated_at = ? WHERE brand <> 'Medicone'",
+        [now],
+      );
       const snapshot = this.db.prepare(
         "INSERT INTO price_table_items(id,version_id,code,description,presentation,brand,unit,price,minimum_price,pack_size) VALUES(?,?,?,?,?,?,?,?,?,?)",
       );
       for (const value of validRows) {
+        const rowBrand = isMedicone ? "Medicone" : value.brand || "Halex Istar";
         snapshot.run([
           crypto.randomUUID(),
           versionId,
           value.code,
           value.description,
           value.presentation || null,
-          value.brand || "Halex Istar",
+          rowBrand,
           value.unit || "UN",
           Number(value.price) || 0,
           value.minimum_price == null ? null : Number(value.minimum_price),
@@ -555,7 +567,7 @@ class LocalDatabase {
             value.code,
             value.description,
             value.presentation || null,
-            value.brand || "Halex Istar",
+            rowBrand,
             value.unit || "UN",
             Number(value.price) || 0,
             value.minimum_price == null ? null : Number(value.minimum_price),
@@ -579,15 +591,27 @@ class LocalDatabase {
     }
   }
 
-  importSalesPriceTable(table) {
+  importSalesPriceTable(table, brand = "Halex Istar") {
+    const isMedicone = brand === "Medicone";
+    const settingKey = isMedicone
+      ? "active_sales_price_table_medicone"
+      : "active_sales_price_table";
     const now = new Date().toISOString();
     this.db.run("BEGIN");
     try {
-      // The commercial table becomes the single active price source: retire any
-      // catalog version still flagged active and deactivate leftover products so
-      // the "Histórico de tabelas" list and quotations reflect only this table.
-      this.db.run("UPDATE price_table_versions SET active = 0");
-      this.db.run("UPDATE products SET active = 0, updated_at = ?", [now]);
+      // The commercial table becomes the active price source for ITS brand.
+      // Deactivate only the same-brand products so the other brand's catalog
+      // stays available (a cotação can mix both). Medicone products are scoped by
+      // brand = 'Medicone'; everything else is treated as the Halex/default brand.
+      // Only a Halex import retires catalog versions — a Medicone import must not
+      // wipe the Halex "Histórico de tabelas".
+      if (!isMedicone) this.db.run("UPDATE price_table_versions SET active = 0");
+      this.db.run(
+        isMedicone
+          ? "UPDATE products SET active = 0, updated_at = ? WHERE brand = 'Medicone'"
+          : "UPDATE products SET active = 0, updated_at = ? WHERE brand <> 'Medicone'",
+        [now],
+      );
       for (const product of table.products) {
         const existing = this.rows(
           "SELECT id,pack_size,brand,unit FROM products WHERE code = ?",
@@ -601,13 +625,13 @@ class LocalDatabase {
         this.db.run(
           `INSERT INTO products(id,code,description,presentation,brand,unit,price,pack_size,active,updated_at)
            VALUES(?,?,?,?,?,?,?,?,1,?)
-           ON CONFLICT(code) DO UPDATE SET description=excluded.description,price=excluded.price,active=1,updated_at=excluded.updated_at`,
+           ON CONFLICT(code) DO UPDATE SET description=excluded.description,brand=excluded.brand,price=excluded.price,active=1,updated_at=excluded.updated_at`,
           [
             existing?.id || crypto.randomUUID(),
             product.code,
             product.description,
             null,
-            existing?.brand || "Halex Istar",
+            brand,
             existing?.unit || "UN",
             Number(firstPrice) || 0,
             Math.max(1, Number(existing?.pack_size) || 1),
@@ -617,8 +641,8 @@ class LocalDatabase {
       }
       const storedTable = { ...table, importedAt: now };
       this.db.run(
-        "INSERT INTO settings(key,value) VALUES('active_sales_price_table',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-        [JSON.stringify(storedTable)],
+        "INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [settingKey, JSON.stringify(storedTable)],
       );
       this.db.run("COMMIT");
       this.persist();
@@ -637,8 +661,12 @@ class LocalDatabase {
     }
   }
 
-  getSalesPriceTable() {
-    const value = this.getSetting("active_sales_price_table");
+  getSalesPriceTable(brand = "Halex Istar") {
+    const value = this.getSetting(
+      brand === "Medicone"
+        ? "active_sales_price_table_medicone"
+        : "active_sales_price_table",
+    );
     if (!value) return null;
     try {
       return JSON.parse(value);

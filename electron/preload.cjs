@@ -36,8 +36,8 @@ contextBridge.exposeInMainWorld("halexDesktop", {
       ipcRenderer.invoke("agreements:prices:import", groupId),
   },
   settings: {
-    chooseLetterhead: () => ipcRenderer.invoke("settings:letterhead"),
-    getLetterhead: () => ipcRenderer.invoke("settings:letterhead:get"),
+    chooseLetterhead: (brand) => ipcRenderer.invoke("settings:letterhead", brand),
+    getLetterhead: (brand) => ipcRenderer.invoke("settings:letterhead:get", brand),
     getEmail: () => ipcRenderer.invoke("settings:email:get"),
     saveEmail: (value) => ipcRenderer.invoke("settings:email:save", value),
     chooseEmailLogos: () => ipcRenderer.invoke("settings:email:logos"),
@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld("halexDesktop", {
   },
   imports: {
     products: () => ipcRenderer.invoke("import:products"),
+    productsMedicone: () => ipcRenderer.invoke("import:products:medicone"),
     clients: () => ipcRenderer.invoke("import:clients"),
     priceVersions: () => ipcRenderer.invoke("prices:versions"),
     activatePriceVersion: (versionId) =>
@@ -61,6 +62,8 @@ contextBridge.exposeInMainWorld("halexDesktop", {
     deletePriceVersion: (versionId) =>
       ipcRenderer.invoke("prices:delete", versionId),
     activeSalesPriceTable: () => ipcRenderer.invoke("sales-prices:active"),
+    activeSalesPriceTableMedicone: () =>
+      ipcRenderer.invoke("sales-prices:active:medicone"),
   },
   updates: {
     check: () => ipcRenderer.invoke("updates:check"),

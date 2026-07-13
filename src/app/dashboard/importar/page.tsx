@@ -20,12 +20,13 @@ type Version = {
 };
 
 export default function ImportPage() {
-  const [busy, setBusy] = useState<"clients" | "products" | "version" | null>(
-    null,
-  );
+  const [busy, setBusy] = useState<
+    "clients" | "products" | "products-medicone" | "version" | null
+  >(null);
   const [message, setMessage] = useState("");
   const [versions, setVersions] = useState<Version[]>([]);
   const [activeSalesTable, setActiveSalesTable] = useState<DesktopSalesPriceTable | null>(null);
+  const [activeMediconeTable, setActiveMediconeTable] = useState<DesktopSalesPriceTable | null>(null);
   const loadVersions = () =>
     window.halexDesktop?.imports
       .priceVersions()
@@ -34,6 +35,7 @@ export default function ImportPage() {
   useEffect(() => {
     void loadVersions();
     window.halexDesktop?.imports.activeSalesPriceTable().then(setActiveSalesTable).catch(() => {});
+    window.halexDesktop?.imports.activeSalesPriceTableMedicone().then(setActiveMediconeTable).catch(() => {});
   }, []);
 
   async function importClients() {
@@ -83,6 +85,32 @@ export default function ImportPage() {
         error instanceof Error
           ? error.message
           : "Não foi possível importar a tabela.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function importMediconeProducts() {
+    if (!window.halexDesktop)
+      return setMessage(
+        "A importação está disponível no aplicativo instalado.",
+      );
+    setBusy("products-medicone");
+    setMessage("");
+    try {
+      const result = await window.halexDesktop.imports.productsMedicone();
+      if (result) {
+        setMessage(result.kind === "sales-price-table"
+          ? `Medicone · ${result.fileName}: tabela ${result.period} ativada com ${result.imported} produtos, ${result.regions} regiões e ${result.categories} categorias${result.fallbackPrices ? `; ${result.fallbackPrices} preço(s) inválido(s) preenchido(s) pela região principal` : ""}.`
+          : `Medicone · ${result.fileName}: catálogo importado com ${result.imported} produtos; ${result.ignored} linhas ignoradas.`);
+        setActiveMediconeTable(await window.halexDesktop.imports.activeSalesPriceTableMedicone());
+      }
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível importar a tabela Medicone.",
       );
     } finally {
       setBusy(null);
@@ -208,6 +236,28 @@ export default function ImportPage() {
             {busy === "products" ? "Importando..." : "Selecionar nova tabela"}
           </button>
         </article>
+        <article className="glass-card p-6">
+          <div className="metric-icon">
+            <FileSpreadsheet size={18} />
+          </div>
+          <h2 className="mt-4 font-semibold">Tabela Medicone</h2>
+          <p className="mt-2 text-sm leading-6 text-stone-500">
+            Tabela comercial de material hospitalar da Medicone. Fica ativa em
+            paralelo à Halex Istar — uma cotação pode conter as duas marcas.
+          </p>
+          <p className="mt-3 text-xs text-stone-400">
+            Mesmo formato da tabela mensal (regiões, categorias e preços) ou
+            catálogo simples. Os produtos entram marcados como Medicone.
+          </p>
+          <button
+            onClick={() => void importMediconeProducts()}
+            disabled={busy !== null}
+            className="brand-button mt-5 inline-flex items-center gap-2 px-4 py-2 text-xs font-bold"
+          >
+            <Upload size={15} />
+            {busy === "products-medicone" ? "Importando..." : "Selecionar tabela Medicone"}
+          </button>
+        </article>
       </section>
       <section className="glass-card overflow-hidden">
         <div className="flex items-center gap-2 border-b border-stone-100 p-5">
@@ -222,10 +272,20 @@ export default function ImportPage() {
         {activeSalesTable && (
           <div className="border-b border-emerald-200 bg-emerald-50 px-5 py-4">
             <p className="text-sm font-bold text-emerald-900">
-              Tabela comercial ativa · {activeSalesTable.period}
+              Tabela Halex Istar ativa · {activeSalesTable.period}
             </p>
             <p className="mt-1 text-xs text-emerald-800">
               {activeSalesTable.name} · {activeSalesTable.products.length} produtos · {activeSalesTable.regions.length} regiões · {activeSalesTable.categories.length} categorias
+            </p>
+          </div>
+        )}
+        {activeMediconeTable && (
+          <div className="border-b border-sky-200 bg-sky-50 px-5 py-4">
+            <p className="text-sm font-bold text-sky-900">
+              Tabela Medicone ativa · {activeMediconeTable.period}
+            </p>
+            <p className="mt-1 text-xs text-sky-800">
+              {activeMediconeTable.name} · {activeMediconeTable.products.length} produtos · {activeMediconeTable.regions.length} regiões · {activeMediconeTable.categories.length} categorias
             </p>
           </div>
         )}

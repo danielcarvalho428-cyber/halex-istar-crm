@@ -15,6 +15,7 @@ import {
   useDesktopLetterhead,
   useDesktopProducts,
   useDesktopSalesPriceTable,
+  useDesktopSalesPriceTableMedicone,
 } from "@/lib/use-desktop-data";
 import { agreementPriceFor } from "@/lib/agreement-pricing";
 import {
@@ -105,6 +106,33 @@ function toDateInput(date: Date) {
 
 const PAYMENT_PRESETS = ["28/42/56 Dias", "30/45/60 Dias", "30 Dias", "À vista"];
 
+type BillingBrand = "Halex Istar" | "Medicone";
+
+// The two invoicing brands. A product's brand decides which one a line belongs
+// to; a quote mixing both is split into one document per brand at export time.
+function normalizeBillingBrand(value: string | undefined | null): BillingBrand {
+  return value === "Medicone" ? "Medicone" : "Halex Istar";
+}
+
+// Per-brand presentation for the fallback header/footer used when a brand has no
+// letterhead image configured.
+const BRAND_IDENTITY: Record<BillingBrand, { name: string; subtitle: string; mark: string; footer: string; prefix: string }> = {
+  "Halex Istar": {
+    name: "HALEX ISTAR",
+    subtitle: "Indústria farmacêutica",
+    mark: "HI",
+    footer: "Halex Istar Indústria Farmacêutica S/A",
+    prefix: "HI",
+  },
+  Medicone: {
+    name: "MEDICONE",
+    subtitle: "Material hospitalar",
+    mark: "MC",
+    footer: "Medicone Material Hospitalar",
+    prefix: "MC",
+  },
+};
+
 function Builder() {
   const params = useSearchParams();
   const editId = params.get("editId");
@@ -112,7 +140,9 @@ function Builder() {
   const products = useDesktopProducts();
   const agreements = useDesktopAgreements();
   const letterhead = useDesktopLetterhead();
+  const mediconeLetterhead = useDesktopLetterhead("Medicone");
   const importedSalesPriceTable = useDesktopSalesPriceTable();
+  const importedMediconeTable = useDesktopSalesPriceTableMedicone();
   const { toast } = useAppUX();
   const [saving, setSaving] = useState(false);
   const [lastDraftAt, setLastDraftAt] = useState<Date | null>(null);
@@ -157,6 +187,10 @@ function Builder() {
   // PDF" after "Salvar") updates the same row instead of colliding on the
   // UNIQUE quote_number.
   const [savedId, setSavedId] = useState<string | null>(editId);
+  // While null the preview shows every line (editing). During the two-PDF export
+  // it is flipped to each brand in turn so the on-screen pages — which printToPDF
+  // captures — contain only that brand's items and its letterhead.
+  const [printBrand, setPrintBrand] = useState<BillingBrand | null>(null);
 
   useEffect(() => {
     if (editId || lines.length === 0) return;
@@ -357,7 +391,12 @@ function Builder() {
     const legacyPrice = selectedClient?.clientType === "distribuidor"
       ? (product.priceDistribuidor ?? product.price)
       : (product.priceHospital ?? product.price);
-    const importedPrice = importedSalesPriceTable
+    // Medicone lines are priced from the Medicone commercial table; every other
+    // brand uses the Halex Istar table. Both share the same region/category keys.
+    const brandTable = normalizeBillingBrand(product.brand) === "Medicone"
+      ? importedMediconeTable
+      : importedSalesPriceTable;
+    const importedPrice = brandTable
       ?.prices?.[salesPriceRegion]?.[salesPriceTable]?.[product.code];
     // No baked-in price table: use the imported (current) table, else the
     // product's own catalog price — never a hardcoded, silently-stale value.
@@ -368,7 +407,7 @@ function Builder() {
       product.code,
       fallbackPrice,
     );
-  }, [agreements, clientId, clientById, importedSalesPriceTable, productById, salesPriceRegion, salesPriceTable]);
+  }, [agreements, clientId, clientById, importedSalesPriceTable, importedMediconeTable, productById, salesPriceRegion, salesPriceTable]);
 
   // Automatically update prices in the cart when client changes (Hospital vs Distribuidor)
   useEffect(() => {
@@ -461,6 +500,34 @@ function Builder() {
       ),
     [products, search],
   );
+  // A line's billing brand comes from its product (Medicone products are
+  // brand=Medicone); the stored line.brand is a fallback for legacy rows.
+  const lineBrand = useCallback(
+    (line: QuoteLine): BillingBrand =>
+      normalizeBillingBrand(productById.get(line.productId)?.brand || line.brand),
+    [productById],
+  );
+  // Brands present in the current quote, Halex Istar first, Medicone second.
+  const brandsInQuote = useMemo<BillingBrand[]>(() => {
+    const present = new Set(lines.map(lineBrand));
+    return (["Halex Istar", "Medicone"] as BillingBrand[]).filter((brand) =>
+      present.has(brand),
+    );
+  }, [lines, lineBrand]);
+  // Lines shown/priced in the preview: all of them while editing, or just the
+  // brand being rendered during the split PDF export.
+  const visibleLines = useMemo(
+    () => (printBrand ? lines.filter((line) => lineBrand(line) === printBrand) : lines),
+    [lines, printBrand, lineBrand],
+  );
+  // The brand whose letterhead/identity the preview shows. During export it is
+  // the brand being printed; while editing it is the sole brand present (or
+  // Halex Istar when the quote mixes both).
+  const activeBrand: BillingBrand =
+    printBrand ?? (brandsInQuote.length === 1 ? brandsInQuote[0] : "Halex Istar");
+  const activeLetterhead =
+    activeBrand === "Medicone" ? mediconeLetterhead : letterhead;
+  const brandIdentity = BRAND_IDENTITY[activeBrand];
   const totalForLine = (line: QuoteLine) => {
     const product = productById.get(line.productId);
     if (!product) return 0;
@@ -481,7 +548,7 @@ function Builder() {
   };
   const hasInvalidQuantity = lines.some(lineHasInvalidQuantity);
   const subtotal = quotationCurrencyValue(
-    lines.reduce(
+    visibleLines.reduce(
       (sum, line) => (lineHasInvalidQuantity(line) ? sum : sum + totalForLine(line)),
       0,
     ),
@@ -491,7 +558,7 @@ function Builder() {
   // Memoized so typing in the catalog search (or any other field) doesn't
   // re-run pagination over the quote lines on every keystroke.
   const quotationPages = useMemo(() => {
-    const rows = lines.flatMap((line) => {
+    const rows = visibleLines.flatMap((line) => {
       const product = productById.get(line.productId);
       if (!product) return [];
       return [{
@@ -504,7 +571,7 @@ function Builder() {
       }];
     });
     return paginateQuotationRows(rows);
-  }, [lines, productById]);
+  }, [visibleLines, productById]);
 
   function add(productId: string) {
     const unitPrice = priceForClient(productId);
@@ -547,6 +614,13 @@ function Builder() {
     });
   }
 
+  // Wait for React to commit and the browser to paint the brand-filtered pages
+  // before printToPDF snapshots the DOM.
+  const nextPaint = () =>
+    new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+
   async function saveQuotation(generatePdf = false) {
     if (!client || lines.length === 0) return;
     const invalidLine = lines.find((line) => {
@@ -563,72 +637,118 @@ function Builder() {
       setNotice("Remova os itens indisponíveis antes de salvar.");
       return;
     }
-    const items = lines.map((line) => {
-      const product = products.find((item) => item.id === line.productId)!;
+
+    // Each invoicing brand becomes its own cotação (separate quote_number, items
+    // and total) because Halex Istar and Medicone are faturados separately.
+    const brands = brandsInQuote;
+    const multiBrand = brands.length > 1;
+    const base = savedId || `manual-${Date.now()}`;
+    const baseSuffix = quoteNumber.replace(/^(HI|MC)-/, "");
+    const buildQuote = (brand: BillingBrand) => {
+      const identity = BRAND_IDENTITY[brand];
+      const brandLines = lines.filter((line) => lineBrand(line) === brand);
+      const items = brandLines.map((line) => {
+        const product = products.find((item) => item.id === line.productId)!;
+        return {
+          product_id: product.id,
+          code: product.code,
+          description: product.description,
+          presentation: product.presentation,
+          brand,
+          unit: product.unit,
+          quantity: line.quantity,
+          unit_price: line.unitPrice,
+          total_value: totalForLine(line),
+          quantity_mode: line.quantityMode || "boxes",
+          unit_quantity: line.quantityMode === "units" ? line.unitQuantity : null,
+        };
+      });
+      const brandTotal = quotationCurrencyValue(
+        brandLines.reduce((sum, line) => sum + totalForLine(line), 0),
+      );
       return {
-        product_id: product.id,
-        code: product.code,
-        description: product.description,
-        presentation: product.presentation,
-        brand: line.brand || product.brand || "",
-        unit: product.unit,
-        quantity: line.quantity,
-        unit_price: line.unitPrice,
-        total_value: totalForLine(line),
-        quantity_mode: line.quantityMode || "boxes",
-        unit_quantity: line.quantityMode === "units" ? line.unitQuantity : null,
+        number: `${identity.prefix}-${baseSuffix}`,
+        record: {
+          id: multiBrand ? `${base}-${identity.prefix.toLowerCase()}` : base,
+          client_name: client.name,
+          quote_number: `${identity.prefix}-${baseSuffix}`,
+          client_id: client.id,
+          issued_at: toDateInput(issued),
+          valid_until: toDateInput(valid),
+          status: "draft",
+          seller,
+          representative_role: representative.role,
+          representative_phone: representative.phone,
+          representative_email: representative.email,
+          sales_price_table: salesPriceTable,
+          sales_price_region: salesPriceRegion,
+          payment_terms: payment,
+          delivery_terms: delivery,
+          freight_terms: freight,
+          notes,
+          total_value: brandTotal,
+          items,
+        },
       };
-    });
-    const id = savedId || `manual-${Date.now()}`;
-    const newQuote = {
-      id,
-      client_name: client.name,
-      quote_number: quoteNumber,
-      client_id: client.id,
-      issued_at: toDateInput(issued),
-      valid_until: toDateInput(valid),
-      status: "draft",
-      seller,
-      representative_role: representative.role,
-      representative_phone: representative.phone,
-      representative_email: representative.email,
-      sales_price_table: salesPriceTable,
-      sales_price_region: salesPriceRegion,
-      payment_terms: payment,
-      delivery_terms: delivery,
-      freight_terms: freight,
-      notes,
-      total_value: subtotal,
-      items,
     };
+    const quotes = brands.map(buildQuote);
 
     setSaving(true);
     try {
       if (window.halexDesktop) {
-        await window.halexDesktop.quotations.save(newQuote);
-        setSavedId(id);
-        setNotice("Cotação salva no computador.");
+        for (const quote of quotes) {
+          await window.halexDesktop.quotations.save(quote.record);
+        }
+        setSavedId(base);
+        setNotice(
+          multiBrand
+            ? "Cotações salvas no computador (uma por marca)."
+            : "Cotação salva no computador.",
+        );
         if (generatePdf) {
-          await window.halexDesktop.quotations.pdf(quoteNumber, client.name);
-          setNotice("Cotação salva e PDF gerado na pasta Cotações.");
+          // Render and export one brand at a time so each PDF gets only that
+          // brand's items and letterhead.
+          for (const brand of brands) {
+            setPrintBrand(brand);
+            await nextPaint();
+            await window.halexDesktop.quotations.pdf(
+              `${BRAND_IDENTITY[brand].prefix}-${baseSuffix}`,
+              client.name,
+            );
+          }
+          setPrintBrand(null);
+          setNotice(
+            multiBrand
+              ? "Cotações salvas e 2 PDFs gerados na pasta Cotações (Halex Istar e Medicone)."
+              : "Cotação salva e PDF gerado na pasta Cotações.",
+          );
         }
       } else {
-        let manualQuotations: Array<StoredQuote | typeof newQuote> = [];
+        let manualQuotations: Array<StoredQuote | typeof quotes[number]["record"]> = [];
         try {
           const parsed = JSON.parse(localStorage.getItem("manualQuotations") || "[]");
           if (Array.isArray(parsed)) manualQuotations = parsed;
         } catch {}
-        const index = manualQuotations.findIndex((quote) => String(quote.id) === id);
-        if (index > -1) manualQuotations[index] = newQuote;
-        else manualQuotations.push(newQuote);
+        for (const quote of quotes) {
+          const index = manualQuotations.findIndex(
+            (item) => String(item.id) === quote.record.id,
+          );
+          if (index > -1) manualQuotations[index] = quote.record;
+          else manualQuotations.push(quote.record);
+        }
         localStorage.setItem("manualQuotations", JSON.stringify(manualQuotations));
-        setSavedId(id);
-        setNotice("Cotação salva localmente com sucesso.");
+        setSavedId(base);
+        setNotice(
+          multiBrand
+            ? "Cotações salvas localmente (uma por marca)."
+            : "Cotação salva localmente com sucesso.",
+        );
         if (generatePdf) window.print();
       }
       localStorage.removeItem("quotationWorkingDraft");
       toast(generatePdf ? "Cotação salva e PDF preparado." : "Cotação salva com segurança.");
     } catch {
+      setPrintBrand(null);
       setNotice("Não foi possível salvar a cotação. Tente novamente.");
       toast("Não foi possível salvar a cotação.", "error");
     } finally {
@@ -702,6 +822,13 @@ function Builder() {
       {noPriceTable && (
         <div className="print-hidden rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
           Nenhuma tabela de preços foi importada. Os valores usam o preço de catálogo de cada produto — importe a tabela atual em Importar antes de gerar cotações para garantir os preços vigentes.
+        </div>
+      )}
+      {brandsInQuote.length > 1 && (
+        <div className="print-hidden rounded-lg border border-sky-300 bg-sky-50 p-3 text-sm font-semibold text-sky-900">
+          Esta cotação será dividida em 2 documentos — um para Halex Istar e outro
+          para Medicone — porque as marcas são faturadas separadamente. Ao gerar o
+          PDF, os dois arquivos são salvos na pasta Cotações.
         </div>
       )}
 
@@ -1124,18 +1251,18 @@ function Builder() {
             return (
               <article
                 key={pageIndex}
-                className={`quotation-page ${letterhead?.dataUrl ? "quotation-page-letterhead" : "quotation-page-standard"}`}
-                style={letterhead?.dataUrl
-                  ? { backgroundImage: `url(${letterhead.dataUrl})` }
+                className={`quotation-page ${activeLetterhead?.dataUrl ? "quotation-page-letterhead" : "quotation-page-standard"}`}
+                style={activeLetterhead?.dataUrl
+                  ? { backgroundImage: `url(${activeLetterhead.dataUrl})` }
                   : undefined}
               >
-                {!letterhead?.dataUrl && (
+                {!activeLetterhead?.dataUrl && (
                   <header className="quotation-brand-header">
                     <div>
-                      <p className="quotation-brand-name">HALEX ISTAR</p>
-                      <p className="quotation-brand-subtitle">Indústria farmacêutica</p>
+                      <p className="quotation-brand-name">{brandIdentity.name}</p>
+                      <p className="quotation-brand-subtitle">{brandIdentity.subtitle}</p>
                     </div>
-                    <div className="quotation-brand-mark">HI</div>
+                    <div className="quotation-brand-mark">{brandIdentity.mark}</div>
                   </header>
                 )}
 
@@ -1263,9 +1390,9 @@ function Builder() {
                   </div>
                 )}
 
-                {!letterhead?.dataUrl && (
+                {!activeLetterhead?.dataUrl && (
                   <footer className="quotation-footer">
-                    <span>Halex Istar Indústria Farmacêutica S/A</span>
+                    <span>{brandIdentity.footer}</span>
                     <span>Documento comercial · Página {pageIndex + 1}/{quotationPages.length}</span>
                   </footer>
                 )}

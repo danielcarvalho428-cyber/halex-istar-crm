@@ -170,6 +170,45 @@ test("stores an imported multi-region sales table and preserves product packagin
   });
 });
 
+test("keeps the Halex and Medicone sales tables independent and both products active", async () => {
+  await withDatabase((database) => {
+    const halexTable = {
+      name: "Halex 08.2026.xlsx",
+      period: "08.2026",
+      regions: [{ value: "co", label: "Centro-Oeste" }],
+      categories: [{ value: "hospital", label: "Hospital" }],
+      products: [{ code: "HALEX1", description: "Soro Halex" }],
+      prices: { co: { hospital: { HALEX1: 5.5 } } },
+      invalidPrices: 0,
+      fallbackPrices: 0,
+    };
+    const mediconeTable = {
+      name: "Medicone 08.2026.xlsx",
+      period: "08.2026",
+      regions: [{ value: "co", label: "Centro-Oeste" }],
+      categories: [{ value: "hospital", label: "Hospital" }],
+      products: [{ code: "MED1", description: "Luva Medicone" }],
+      prices: { co: { hospital: { MED1: 9.9 } } },
+      invalidPrices: 0,
+      fallbackPrices: 0,
+    };
+    database.importSalesPriceTable(halexTable, "Halex Istar");
+    database.importSalesPriceTable(mediconeTable, "Medicone");
+
+    // The Medicone import must NOT wipe the Halex table or deactivate its product.
+    assert.equal(database.getSalesPriceTable().prices.co.hospital.HALEX1, 5.5);
+    assert.equal(database.getSalesPriceTable("Medicone").prices.co.hospital.MED1, 9.9);
+
+    const products = database.listProducts();
+    const halexProduct = products.find((item) => item.code === "HALEX1");
+    const mediconeProduct = products.find((item) => item.code === "MED1");
+    assert.ok(halexProduct, "Halex product stays active after Medicone import");
+    assert.ok(mediconeProduct, "Medicone product is active");
+    assert.equal(halexProduct.brand, "Halex Istar");
+    assert.equal(mediconeProduct.brand, "Medicone");
+  });
+});
+
 test("moves a client between agreement groups and stores special prices", async () => {
   await withDatabase((database) => {
     const first = database.saveAgreementGroup({ name: "Rede A" });

@@ -119,7 +119,7 @@ export function useDesktopQuotations() {
   return quotations;
 }
 
-export function useDesktopLetterhead() {
+export function useDesktopLetterhead(brand: "Halex Istar" | "Medicone" = "Halex Istar") {
   const [letterhead, setLetterhead] = useState<{
     fileName: string;
     mime: string;
@@ -127,10 +127,10 @@ export function useDesktopLetterhead() {
   } | null>(null);
   useEffect(() => {
     window.halexDesktop?.settings
-      .getLetterhead()
+      .getLetterhead(brand)
       .then(setLetterhead)
       .catch(() => {});
-  }, []);
+  }, [brand]);
   return letterhead;
 }
 
@@ -150,6 +150,17 @@ export function useDesktopSalesPriceTable() {
   useEffect(() => {
     window.halexDesktop?.imports
       .activeSalesPriceTable()
+      .then(setTable)
+      .catch(() => {});
+  }, []);
+  return table;
+}
+
+export function useDesktopSalesPriceTableMedicone() {
+  const [table, setTable] = useState<DesktopSalesPriceTable | null>(null);
+  useEffect(() => {
+    window.halexDesktop?.imports
+      .activeSalesPriceTableMedicone()
       .then(setTable)
       .catch(() => {});
   }, []);

@@ -13,6 +13,7 @@ type EmailForm = {
 
 export default function SettingsPage() {
   const [file, setFile] = useState("");
+  const [mediconeFile, setMediconeFile] = useState("");
   const [logos, setLogos] = useState<string[]>([]);
   const [hasPassword, setHasPassword] = useState(false);
   const [notice, setNotice] = useState("");
@@ -35,6 +36,12 @@ export default function SettingsPage() {
       .getLetterhead()
       .then((current) => {
         if (current) setFile(current.fileName);
+      })
+      .catch(() => {});
+    window.halexDesktop?.settings
+      .getLetterhead("Medicone")
+      .then((current) => {
+        if (current) setMediconeFile(current.fileName);
       })
       .catch(() => {});
     window.halexDesktop?.settings
@@ -65,6 +72,12 @@ export default function SettingsPage() {
     event.preventDefault();
     const selected = await window.halexDesktop.settings.chooseLetterhead();
     if (selected) setFile(selected.split(/[\\/]/).at(-1) || selected);
+  }
+  async function chooseMediconeLetterhead(event: React.MouseEvent<HTMLLabelElement>) {
+    if (!window.halexDesktop) return;
+    event.preventDefault();
+    const selected = await window.halexDesktop.settings.chooseLetterhead("Medicone");
+    if (selected) setMediconeFile(selected.split(/[\\/]/).at(-1) || selected);
   }
   function updateEmail(field: keyof EmailForm, value: string) {
     setEmailForm((current) => ({ ...current, [field]: value }));
@@ -223,6 +236,44 @@ export default function SettingsPage() {
         {file && (
           <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
             Selecionado: {file}
+          </p>
+        )}
+      </section>
+
+      <section className="glass-card max-w-3xl p-6">
+        <div className="flex items-center gap-3">
+          <div className="metric-icon">
+            <FileImage size={18} />
+          </div>
+          <div>
+            <h2 className="font-semibold">Medicone</h2>
+            <p className="mt-1 text-xs text-stone-500">
+              Papel timbrado usado nas cotações de material hospitalar Medicone. PDF, PNG ou JPG.
+            </p>
+          </div>
+        </div>
+        <label
+          onClick={(event) => void chooseMediconeLetterhead(event)}
+          className="mt-6 flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-stone-300 bg-stone-50 p-6 text-center hover:border-amber-500"
+        >
+          <Upload size={24} className="text-amber-700" />
+          <p className="mt-3 text-sm font-semibold">
+            Selecionar papel timbrado Medicone
+          </p>
+          <p className="mt-1 text-xs text-stone-500">
+            Aplicado ao PDF da cotação Medicone. O arquivo fica armazenado somente
+            neste computador.
+          </p>
+          <input
+            type="file"
+            accept=".pdf,image/png,image/jpeg"
+            className="sr-only"
+            onChange={(event) => setMediconeFile(event.target.files?.[0]?.name || "")}
+          />
+        </label>
+        {mediconeFile && (
+          <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
+            Selecionado: {mediconeFile}
           </p>
         )}
       </section>
