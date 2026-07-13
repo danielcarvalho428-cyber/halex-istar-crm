@@ -198,6 +198,41 @@ function salesPriceTableFromSheets(sheets, sourceName) {
 //
 // It becomes a sales table with a single "default" region and two categories,
 // so a Medicone line is priced by the client's type (hospital vs distribuidor).
+
+// The "Condições" cell holds quantity-break pricing as free text, one faixa per
+// line, e.g. "Até 49 und - R$ 76,00 / De 50 a 99 und - R$ 71,00 / Acima de 500
+// - R$ 64,00". Parse it into ordered tiers; an open-ended top faixa gets max
+// null (JSON-safe, treated as no upper bound at lookup time).
+function parseMediconeTiers(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const tiers = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const priceMatch = line.match(/R\$\s*([\d.,]+)/i);
+    const price = priceMatch ? numberValue(priceMatch[1]) : null;
+    if (price == null) continue;
+    let min = null;
+    let max = null;
+    let m;
+    if ((m = line.match(/at[ée]\s*(\d+)/i))) {
+      min = 1;
+      max = Number(m[1]);
+    } else if ((m = line.match(/de\s*(\d+)\s*a\s*(\d+)/i))) {
+      min = Number(m[1]);
+      max = Number(m[2]);
+    } else if ((m = line.match(/acima\s*de\s*(\d+)/i))) {
+      min = Number(m[1]);
+      max = null;
+    } else {
+      continue;
+    }
+    tiers.push({ min, max, price });
+  }
+  return tiers.length ? tiers.sort((a, b) => a.min - b.min) : null;
+}
+
 function mediconeSalesTableFromSheets(sheets, sourceName) {
   if (!Array.isArray(sheets) || sheets.length === 0) return null;
   const rows = sheets[0]?.rows || [];
@@ -221,9 +256,15 @@ function mediconeSalesTableFromSheets(sheets, sourceName) {
     return null;
   }
 
+  // The "Condições" faixa text sits in the column immediately after each price.
+  const distributorCondColumn = distributorColumn >= 0 ? distributorColumn + 1 : -1;
+  const hospitalCondColumn = hospitalColumn >= 0 ? hospitalColumn + 1 : -1;
+
   const products = new Map();
   const distributorPrices = {};
   const hospitalPrices = {};
+  const distributorTiers = {};
+  const hospitalTiers = {};
   let invalidPrices = 0;
   let currentGroup = "";
 
@@ -256,6 +297,11 @@ function mediconeSalesTableFromSheets(sheets, sourceName) {
     const hospital = hospitalPrice != null && hospitalPrice >= 0 ? hospitalPrice : distributorPrice;
     if (distributor != null) distributorPrices[code] = distributor;
     if (hospital != null) hospitalPrices[code] = hospital;
+
+    const distributorTier = distributorCondColumn >= 0 ? parseMediconeTiers(row[distributorCondColumn]) : null;
+    const hospitalTier = hospitalCondColumn >= 0 ? parseMediconeTiers(row[hospitalCondColumn]) : null;
+    if (distributorTier) distributorTiers[code] = distributorTier;
+    if (hospitalTier) hospitalTiers[code] = hospitalTier;
   }
   if (products.size === 0) return null;
 
@@ -272,9 +318,10 @@ function mediconeSalesTableFromSheets(sheets, sourceName) {
     ],
     products: Array.from(products.values()),
     prices: { default: { hospital: hospitalPrices, distribuidor: distributorPrices } },
+    tiers: { hospital: hospitalTiers, distribuidor: distributorTiers },
     invalidPrices,
     fallbackPrices: 0,
   };
 }
 
-module.exports = { normalizeHeader, field, numberValue, productRows, salesPriceTableFromSheets, mediconeSalesTableFromSheets };
+module.exports = { normalizeHeader, field, numberValue, productRows, salesPriceTableFromSheets, mediconeSalesTableFromSheets, parseMediconeTiers };

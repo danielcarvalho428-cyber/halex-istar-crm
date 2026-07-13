@@ -384,7 +384,22 @@ function Builder() {
     if (!clientById.has(clientId)) setClientId(clients[0].id);
   }, [editId, clients, clientById, clientId]);
 
-  const priceForClient = useCallback((productId: string, selectedClientId = clientId) => {
+  // The Medicone quantity-break faixa that applies to a given code, client tier
+  // and total units — or null when the product has no faixas.
+  const mediconeTier = useCallback(
+    (code: string, isDistribuidor: boolean, units: number) => {
+      const faixas = importedMediconeTable?.tiers?.[isDistribuidor ? "distribuidor" : "hospital"]?.[code];
+      if (!Array.isArray(faixas) || faixas.length === 0) return null;
+      const quantity = Math.max(1, units);
+      return (
+        faixas.find((faixa) => quantity >= faixa.min && (faixa.max == null || quantity <= faixa.max)) ??
+        faixas[faixas.length - 1]
+      );
+    },
+    [importedMediconeTable],
+  );
+
+  const priceForClient = useCallback((productId: string, selectedClientId = clientId, units = 1) => {
     const product = productById.get(productId);
     if (!product) return 0;
     const selectedClient = clientById.get(selectedClientId);
@@ -393,10 +408,17 @@ function Builder() {
       ? (product.priceDistribuidor ?? product.price)
       : (product.priceHospital ?? product.price);
     // Medicone has a single table with two tiers (hospital / distribuidor) chosen
-    // by the client type; Halex Istar uses the selected region × category.
-    const importedPrice = normalizeBillingBrand(product.brand) === "Medicone"
-      ? importedMediconeTable?.prices?.default?.[isDistribuidor ? "distribuidor" : "hospital"]?.[product.code]
-      : importedSalesPriceTable?.prices?.[salesPriceRegion]?.[salesPriceTable]?.[product.code];
+    // by the client type; quantity-break faixas override the base tier price when
+    // the ordered units reach a breakpoint. Halex Istar uses region × category.
+    let importedPrice: number | undefined;
+    if (normalizeBillingBrand(product.brand) === "Medicone") {
+      const tier = mediconeTier(product.code, isDistribuidor, units);
+      importedPrice = tier
+        ? tier.price
+        : importedMediconeTable?.prices?.default?.[isDistribuidor ? "distribuidor" : "hospital"]?.[product.code];
+    } else {
+      importedPrice = importedSalesPriceTable?.prices?.[salesPriceRegion]?.[salesPriceTable]?.[product.code];
+    }
     // No baked-in price table: use the imported (current) table, else the
     // product's own catalog price — never a hardcoded, silently-stale value.
     const fallbackPrice = importedPrice ?? legacyPrice;
@@ -406,7 +428,16 @@ function Builder() {
       product.code,
       fallbackPrice,
     );
-  }, [agreements, clientId, clientById, importedSalesPriceTable, importedMediconeTable, productById, salesPriceRegion, salesPriceTable]);
+  }, [agreements, clientId, clientById, importedSalesPriceTable, importedMediconeTable, mediconeTier, productById, salesPriceRegion, salesPriceTable]);
+
+  // Total units currently on a line, used to resolve the Medicone faixa.
+  const lineUnits = useCallback(
+    (line: QuoteLine) => {
+      const packSize = Math.max(1, productById.get(line.productId)?.packSize || 1);
+      return quotationLineUnits(line.quantityMode, line.quantity, line.unitQuantity, packSize);
+    },
+    [productById],
+  );
 
   // Automatically update prices in the cart when client changes (Hospital vs Distribuidor)
   useEffect(() => {
@@ -420,13 +451,13 @@ function Builder() {
           const product = productById.get(line.productId);
           return {
             ...line,
-            unitPrice: priceForClient(line.productId),
+            unitPrice: priceForClient(line.productId, clientId, lineUnits(line)),
             brand: line.brand || product?.brand || "",
           };
         })
       );
     }
-  }, [clientId, products, clients, productById, agreements, priceForClient]);
+  }, [clientId, products, clients, productById, agreements, priceForClient, lineUnits]);
 
   useEffect(() => {
     if (
@@ -438,9 +469,9 @@ function Builder() {
     setPriceDrafts({});
     setLines((current) => current.map((line) => ({
       ...line,
-      unitPrice: priceForClient(line.productId),
+      unitPrice: priceForClient(line.productId, clientId, lineUnits(line)),
     })));
-  }, [priceForClient, salesPriceRegion, salesPriceTable]);
+  }, [priceForClient, clientId, lineUnits, salesPriceRegion, salesPriceTable]);
 
   const importedSalesPriceKey = importedSalesPriceTable
     ? `${importedSalesPriceTable.name || ""}|${importedSalesPriceTable.importedAt || ""}|${importedSalesPriceTable.period || ""}`
@@ -453,13 +484,13 @@ function Builder() {
       setPriceDrafts({});
       setLines((current) => current.map((line) => ({
         ...line,
-        unitPrice: priceForClient(line.productId),
+        unitPrice: priceForClient(line.productId, clientId, lineUnits(line)),
       })));
     });
     return () => {
       cancelled = true;
     };
-  }, [editId, importedSalesPriceKey, priceForClient]);
+  }, [editId, importedSalesPriceKey, priceForClient, clientId, lineUnits]);
 
   useEffect(() => {
     if (
@@ -475,12 +506,12 @@ function Builder() {
         const product = productById.get(line.productId);
         return {
           ...line,
-          unitPrice: priceForClient(line.productId),
+          unitPrice: priceForClient(line.productId, clientId, lineUnits(line)),
           brand: line.brand || product?.brand || "",
         };
       }),
     );
-  }, [agreements, editId, productById, priceForClient]);
+  }, [agreements, editId, productById, priceForClient, clientId, lineUnits]);
 
   const client = clientById.get(clientId) || clients[0];
   const salesPriceRegions = importedSalesPriceTable?.regions ?? SALES_PRICE_REGIONS;
@@ -572,30 +603,57 @@ function Builder() {
     return paginateQuotationRows(rows);
   }, [visibleLines, productById]);
 
-  function add(productId: string) {
-    const unitPrice = priceForClient(productId);
+  // True when a Medicone product has quantity-break faixas for the current
+  // client tier — the only case where changing quantity should re-derive the
+  // unit price (otherwise a manual price edit must be preserved).
+  const isMediconeTiered = useCallback(
+    (productId: string) => {
+      const product = productById.get(productId);
+      if (!product || normalizeBillingBrand(product.brand) !== "Medicone") return false;
+      const isDistribuidor = clientById.get(clientId)?.clientType === "distribuidor";
+      return Boolean(
+        importedMediconeTable?.tiers?.[isDistribuidor ? "distribuidor" : "hospital"]?.[product.code]?.length,
+      );
+    },
+    [productById, clientById, clientId, importedMediconeTable],
+  );
 
+  function add(productId: string) {
     setLines((current) => {
       const found = current.find((line) => line.productId === productId);
       const product = productById.get(productId);
       const brand = product?.brand || "";
       const packSize = Math.max(1, product?.packSize || 1);
-      return found
-        ? current.map((line) =>
-            line.productId === productId
-              ? {
-                  ...line,
-                  quantity: line.quantity + 1,
-                  // Keep the unit count in sync when the line is expressed in units.
-                  unitQuantity:
-                    line.quantityMode === "units"
-                      ? (line.quantity + 1) * packSize
-                      : line.unitQuantity,
-                  brand: line.brand || brand,
-                }
-              : line,
-          )
-        : [...current, { productId, quantity: 1, unitPrice, brand, quantityMode: "units", unitQuantity: packSize }];
+      if (found) {
+        const nextQuantity = found.quantity + 1;
+        const nextUnits = nextQuantity * packSize;
+        return current.map((line) =>
+          line.productId === productId
+            ? {
+                ...line,
+                quantity: nextQuantity,
+                // Keep the unit count in sync when the line is expressed in units.
+                unitQuantity: line.quantityMode === "units" ? nextUnits : line.unitQuantity,
+                // Re-derive the faixa price only for tiered Medicone products.
+                unitPrice: isMediconeTiered(productId)
+                  ? priceForClient(productId, clientId, nextUnits)
+                  : line.unitPrice,
+                brand: line.brand || brand,
+              }
+            : line,
+        );
+      }
+      return [
+        ...current,
+        {
+          productId,
+          quantity: 1,
+          unitPrice: priceForClient(productId, clientId, packSize),
+          brand,
+          quantityMode: "units",
+          unitQuantity: packSize,
+        },
+      ];
     });
   }
   function update(index: number, patch: Partial<QuoteLine>) {
@@ -1113,18 +1171,44 @@ function Builder() {
                         },
                   );
                 };
+                const tiered = isMediconeTiered(line.productId);
                 const updateQuantity = (amount: number) => {
                   if (unitMode) {
-                    update(index, {
+                    const patch: Partial<QuoteLine> = {
                       unitQuantity: amount,
                       ...(amount > 0 && amount % packSize === 0
                         ? { quantity: amount / packSize }
                         : {}),
-                    });
+                    };
+                    if (tiered) {
+                      patch.unitPrice = priceForClient(line.productId, clientId, amount);
+                      clearPriceDraft(line.productId);
+                    }
+                    update(index, patch);
                   } else {
-                    update(index, { quantity: Math.max(1, amount) });
+                    const nextQuantity = Math.max(1, amount);
+                    const patch: Partial<QuoteLine> = { quantity: nextQuantity };
+                    if (tiered) {
+                      patch.unitPrice = priceForClient(line.productId, clientId, nextQuantity * packSize);
+                      clearPriceDraft(line.productId);
+                    }
+                    update(index, patch);
                   }
                 };
+                const appliedFaixa = tiered
+                  ? mediconeTier(
+                      product.code,
+                      clientById.get(clientId)?.clientType === "distribuidor",
+                      quotationLineUnits(line.quantityMode, line.quantity, line.unitQuantity, packSize),
+                    )
+                  : null;
+                const faixaLabel = appliedFaixa
+                  ? appliedFaixa.max == null
+                    ? `acima de ${appliedFaixa.min} un`
+                    : appliedFaixa.min === 1
+                      ? `até ${appliedFaixa.max} un`
+                      : `${appliedFaixa.min} a ${appliedFaixa.max} un`
+                  : "";
                 return (
                   <div
                     key={product.id}
@@ -1137,6 +1221,11 @@ function Builder() {
                       <p className="mt-1 text-xs text-stone-500">
                         {product.code} · {product.presentation}
                       </p>
+                      {appliedFaixa && (
+                        <p className="mt-1 text-[11px] font-semibold text-sky-700">
+                          Condição Medicone aplicada: {faixaLabel} → {money(appliedFaixa.price)}/un
+                        </p>
+                      )}
                     </div>
                     <label className="text-[10px] font-bold uppercase text-stone-500">
                       Quantidade · caixa com {packSize}

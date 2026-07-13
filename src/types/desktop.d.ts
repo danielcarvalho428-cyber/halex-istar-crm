@@ -36,6 +36,12 @@ type DesktopSalesPriceTable = {
   categories: Array<{ value: string; label: string }>;
   products: Array<{ code: string; description: string }>;
   prices: Record<string, Record<string, Record<string, number>>>;
+  // Medicone quantity-break pricing: per client tier, per product code, the
+  // ordered faixas. `max: null` means the top open-ended faixa.
+  tiers?: {
+    hospital: Record<string, Array<{ min: number; max: number | null; price: number }>>;
+    distribuidor: Record<string, Array<{ min: number; max: number | null; price: number }>>;
+  };
   invalidPrices: number;
   fallbackPrices: number;
 };

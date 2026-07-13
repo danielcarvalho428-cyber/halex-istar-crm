@@ -74,6 +74,21 @@ test("parses the Medicone two-tier catalog with group, pack size and both prices
   assert.equal(table.prices.default.hospital["94779"], 300);
 });
 
+test("parses Medicone quantity-break faixas from the Condições column", () => {
+  const cond = "Até 49 und - R$ 76,00\nDe 50 a 99 und - R$ 71,00\nDe 100 a 199 und - R$ 70,00\nAcima de 500 - R$ 64,00";
+  const rows = [
+    ["Grupo", "Código", "Descrição do Produto", "QTDE CX", "Impostos", "", "Tabela Distribuidor (Unit.)", "", "Tabela Hospital  (Unit.)", ""],
+    ["", "", "", "", "IPI", "ICMS", "Mínimo Unitário", "Condições", "Mínimo Unitário", "Condições"],
+    ["MASCARA", 94139, "MASCARA X", 1, 0, "Isento", 64, cond, 76.8, cond],
+  ];
+  const table = mediconeSalesTableFromSheets([{ name: "Sheet1", rows }], "medicone.xlsx");
+  const faixas = table.tiers.distribuidor["94139"];
+  assert.equal(faixas.length, 4);
+  assert.deepEqual(faixas[0], { min: 1, max: 49, price: 76 });
+  assert.deepEqual(faixas[1], { min: 50, max: 99, price: 71 });
+  assert.deepEqual(faixas[3], { min: 500, max: null, price: 64 }); // open-ended top faixa
+});
+
 test("ignores a Medicone workbook that is not the two-tier layout", () => {
   const table = mediconeSalesTableFromSheets(
     [{ name: "Sheet1", rows: [["foo", "bar"], ["1", "2"]] }],
