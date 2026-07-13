@@ -388,16 +388,15 @@ function Builder() {
     const product = productById.get(productId);
     if (!product) return 0;
     const selectedClient = clientById.get(selectedClientId);
-    const legacyPrice = selectedClient?.clientType === "distribuidor"
+    const isDistribuidor = selectedClient?.clientType === "distribuidor";
+    const legacyPrice = isDistribuidor
       ? (product.priceDistribuidor ?? product.price)
       : (product.priceHospital ?? product.price);
-    // Medicone lines are priced from the Medicone commercial table; every other
-    // brand uses the Halex Istar table. Both share the same region/category keys.
-    const brandTable = normalizeBillingBrand(product.brand) === "Medicone"
-      ? importedMediconeTable
-      : importedSalesPriceTable;
-    const importedPrice = brandTable
-      ?.prices?.[salesPriceRegion]?.[salesPriceTable]?.[product.code];
+    // Medicone has a single table with two tiers (hospital / distribuidor) chosen
+    // by the client type; Halex Istar uses the selected region × category.
+    const importedPrice = normalizeBillingBrand(product.brand) === "Medicone"
+      ? importedMediconeTable?.prices?.default?.[isDistribuidor ? "distribuidor" : "hospital"]?.[product.code]
+      : importedSalesPriceTable?.prices?.[salesPriceRegion]?.[salesPriceTable]?.[product.code];
     // No baked-in price table: use the imported (current) table, else the
     // product's own catalog price — never a hardcoded, silently-stale value.
     const fallbackPrice = importedPrice ?? legacyPrice;

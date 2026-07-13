@@ -190,4 +190,91 @@ function salesPriceTableFromSheets(sheets, sourceName) {
   };
 }
 
-module.exports = { normalizeHeader, field, numberValue, productRows, salesPriceTableFromSheets };
+// The Medicone workbook is a single flat sheet with two price tiers
+// (Distribuidor / Hospital) rather than the Halex region×category layout:
+//
+//   Grupo | Código | Descrição do Produto | QTDE CX | IPI | ICMS |
+//   Tabela Distribuidor (Unit.) | Condições | Tabela Hospital (Unit.) | Condições
+//
+// It becomes a sales table with a single "default" region and two categories,
+// so a Medicone line is priced by the client's type (hospital vs distribuidor).
+function mediconeSalesTableFromSheets(sheets, sourceName) {
+  if (!Array.isArray(sheets) || sheets.length === 0) return null;
+  const rows = sheets[0]?.rows || [];
+  const headerIndex = rows.findIndex((row) => {
+    if (!Array.isArray(row)) return false;
+    const hasCode = row.some((cell) => normalizeHeader(cell) === "codigo");
+    const hasDescription = row.some((cell) => normalizeHeader(cell).includes("descricao"));
+    return hasCode && hasDescription;
+  });
+  if (headerIndex < 0) return null;
+
+  const header = rows[headerIndex].map((cell) => normalizeHeader(cell));
+  const findColumn = (predicate) => header.findIndex(predicate);
+  const codeColumn = findColumn((value) => value === "codigo");
+  const descriptionColumn = findColumn((value) => value.includes("descricao"));
+  const groupColumn = findColumn((value) => value === "grupo");
+  const packColumn = findColumn((value) => value.includes("qtde"));
+  const distributorColumn = findColumn((value) => value.includes("distribuidor"));
+  const hospitalColumn = findColumn((value) => value.includes("hospital"));
+  if (codeColumn < 0 || descriptionColumn < 0 || (distributorColumn < 0 && hospitalColumn < 0)) {
+    return null;
+  }
+
+  const products = new Map();
+  const distributorPrices = {};
+  const hospitalPrices = {};
+  let invalidPrices = 0;
+  let currentGroup = "";
+
+  for (const row of rows.slice(headerIndex + 1)) {
+    if (!Array.isArray(row)) continue;
+    if (groupColumn >= 0 && String(row[groupColumn] || "").trim()) {
+      currentGroup = String(row[groupColumn]).trim();
+    }
+    const code = String(row[codeColumn] ?? "").trim();
+    const description = String(row[descriptionColumn] ?? "").trim();
+    // Skip the sub-header row and any blank/section rows.
+    if (!code || !description || normalizeHeader(code) === "codigo") continue;
+
+    const distributorPrice = distributorColumn >= 0 ? numberValue(row[distributorColumn]) : null;
+    const hospitalPrice = hospitalColumn >= 0 ? numberValue(row[hospitalColumn]) : null;
+    if ((distributorPrice == null || distributorPrice < 0) && (hospitalPrice == null || hospitalPrice < 0)) {
+      invalidPrices += 1;
+      continue;
+    }
+    const packSize = packColumn >= 0 ? numberValue(row[packColumn]) : null;
+    products.set(code, {
+      code,
+      description,
+      presentation: currentGroup,
+      packSize: Math.max(1, Math.trunc(Number(packSize) || 1)),
+    });
+    // Fall back to the other tier when one price is missing so every product has
+    // both, keeping pricing predictable regardless of the selected client type.
+    const distributor = distributorPrice != null && distributorPrice >= 0 ? distributorPrice : hospitalPrice;
+    const hospital = hospitalPrice != null && hospitalPrice >= 0 ? hospitalPrice : distributorPrice;
+    if (distributor != null) distributorPrices[code] = distributor;
+    if (hospital != null) hospitalPrices[code] = hospital;
+  }
+  if (products.size === 0) return null;
+
+  const periodMatch = String(sourceName || "").match(/(0[1-9]|1[0-2])[.\-_]?(20\d{2})/);
+  const period = periodMatch ? `${periodMatch[1]}.${periodMatch[2]}` : "Tabela Medicone";
+  return {
+    name: String(sourceName || period),
+    period,
+    importedAt: new Date().toISOString(),
+    regions: [{ value: "default", label: "Tabela única" }],
+    categories: [
+      { value: "hospital", label: "Hospital / Clínica" },
+      { value: "distribuidor", label: "Distribuidor" },
+    ],
+    products: Array.from(products.values()),
+    prices: { default: { hospital: hospitalPrices, distribuidor: distributorPrices } },
+    invalidPrices,
+    fallbackPrices: 0,
+  };
+}
+
+module.exports = { normalizeHeader, field, numberValue, productRows, salesPriceTableFromSheets, mediconeSalesTableFromSheets };

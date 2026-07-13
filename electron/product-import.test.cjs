@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { productRows, salesPriceTableFromSheets } = require("./product-import.cjs");
+const { productRows, salesPriceTableFromSheets, mediconeSalesTableFromSheets } = require("./product-import.cjs");
 
 test("imports the abbreviated headers from the real price workbook", () => {
   const [product] = productRows([
@@ -49,6 +49,37 @@ test("recognizes the standard multi-region monthly sales workbook", () => {
   assert.equal(table.regions.length, 2);
   assert.equal(table.categories.length, 6);
   assert.equal(table.prices["n-ne-sul"]["hospital-ab-fractionated"]["4130"], 4.01);
+});
+
+test("parses the Medicone two-tier catalog with group, pack size and both prices", () => {
+  const rows = [
+    ["TABELA DE PREÇOS MEDICONE", "", "TABELA DE PREÇOS", "", "", "", "", "", "Versão:", 84],
+    ["", "", "", "", "", "", "", "", "Data:", 46027],
+    [3, 4, 5, "", "", 7, 11, 12, 17, 20],
+    ["Grupo", "Código", "Descrição do Produto", "QTDE CX", "Impostos", "", "Tabela Distribuidor (Unit.)", "", "Tabela Hospital  (Unit.)", ""],
+    ["", "", "", "", "IPI", "ICMS", "Mínimo Unitário para Distribuidor", "Condições", "Mínimo Unitário  Hospital/Clinica", "Condições"],
+    ["", "", "", "", "", "", "", "", "", ""],
+    ["CATETER PICC", 94778, "CATETER PICC 2.8FRX50CM", 1, 0, "Isento", 250, 0, 290, 0],
+    ["", 94779, "CATETER PICC 3FRX65CM", 2, 0, "Isento", 260, 0, 300, 0],
+  ];
+  const table = mediconeSalesTableFromSheets([{ name: "Sheet1", rows }], "tabela medicone.xlsx");
+  assert.equal(table.products.length, 2);
+  assert.equal(table.categories.length, 2);
+  assert.equal(table.regions.length, 1);
+  assert.equal(table.products[0].presentation, "CATETER PICC");
+  assert.equal(table.products[1].presentation, "CATETER PICC"); // group carries down
+  assert.equal(table.products[1].packSize, 2);
+  assert.equal(table.prices.default.hospital["94778"], 290);
+  assert.equal(table.prices.default.distribuidor["94778"], 250);
+  assert.equal(table.prices.default.hospital["94779"], 300);
+});
+
+test("ignores a Medicone workbook that is not the two-tier layout", () => {
+  const table = mediconeSalesTableFromSheets(
+    [{ name: "Sheet1", rows: [["foo", "bar"], ["1", "2"]] }],
+    "x.xlsx",
+  );
+  assert.equal(table, null);
 });
 
 test("fills broken regional formulas from the first valid regional sheet", () => {

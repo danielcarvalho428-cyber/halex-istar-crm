@@ -675,6 +675,65 @@ class LocalDatabase {
     }
   }
 
+  // Medicone tables carry their own pack size and presentation (grupo) and two
+  // price tiers, so they get a dedicated importer that stores those on the
+  // product rows without touching the Halex catalog/versions.
+  importMediconeTable(table) {
+    const now = new Date().toISOString();
+    this.db.run("BEGIN");
+    try {
+      this.db.run(
+        "UPDATE products SET active = 0, updated_at = ? WHERE brand = 'Medicone'",
+        [now],
+      );
+      for (const product of table.products) {
+        const existing = this.rows(
+          "SELECT id FROM products WHERE code = ?",
+          [product.code],
+        )[0];
+        const basePrice =
+          table.prices?.default?.hospital?.[product.code] ??
+          table.prices?.default?.distribuidor?.[product.code] ??
+          0;
+        this.db.run(
+          `INSERT INTO products(id,code,description,presentation,brand,unit,price,pack_size,active,updated_at)
+           VALUES(?,?,?,?,?,?,?,?,1,?)
+           ON CONFLICT(code) DO UPDATE SET description=excluded.description,presentation=excluded.presentation,brand=excluded.brand,price=excluded.price,pack_size=excluded.pack_size,active=1,updated_at=excluded.updated_at`,
+          [
+            existing?.id || crypto.randomUUID(),
+            product.code,
+            product.description,
+            product.presentation || null,
+            "Medicone",
+            "UN",
+            Number(basePrice) || 0,
+            Math.max(1, Math.trunc(Number(product.packSize) || 1)),
+            now,
+          ],
+        );
+      }
+      const storedTable = { ...table, importedAt: now };
+      this.db.run(
+        "INSERT INTO settings(key,value) VALUES('active_sales_price_table_medicone',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [JSON.stringify(storedTable)],
+      );
+      this.db.run("COMMIT");
+      this.persist();
+      return {
+        imported: table.products.length,
+        ignored: table.invalidPrices,
+        total: table.products.length,
+        regions: table.regions.length,
+        categories: table.categories.length,
+        fallbackPrices: table.fallbackPrices,
+        period: table.period,
+      };
+    } catch (error) {
+      this.db.run("ROLLBACK");
+      throw error;
+    }
+  }
+
   activatePriceVersion(versionId) {
     const rows = this.rows(
       "SELECT * FROM price_table_items WHERE version_id = ?",

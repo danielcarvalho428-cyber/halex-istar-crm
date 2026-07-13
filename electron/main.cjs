@@ -20,7 +20,7 @@ let _xlsx = null;
 const loadXlsx = () => (_xlsx ??= require("xlsx"));
 const { LocalDatabase } = require("./database.cjs");
 const defaultReferenceData = require("./defaults/reference-data.json");
-const { normalizeHeader, field, numberValue, productRows, salesPriceTableFromSheets } = require("./product-import.cjs");
+const { normalizeHeader, field, numberValue, productRows, salesPriceTableFromSheets, mediconeSalesTableFromSheets } = require("./product-import.cjs");
 const { parseNfePdfIdentity } = require("./nfe-document.cjs");
 
 let mainWindow;
@@ -403,6 +403,21 @@ function registerIpc() {
     if (result.canceled) return null;
     const filePath = result.filePaths[0];
     const fileName = path.basename(filePath);
+    // Medicone workbooks use a flat two-tier layout of their own; recognize it
+    // first so it isn't misread as a Halex catalog.
+    if (brand === "Medicone") {
+      const mediconeTable = mediconeSalesTableFromSheets(
+        spreadsheetSheets(filePath),
+        fileName,
+      );
+      if (mediconeTable) {
+        return {
+          fileName,
+          kind: "sales-price-table",
+          ...database.importMediconeTable(mediconeTable),
+        };
+      }
+    }
     const salesTable = salesPriceTableFromSheets(
       spreadsheetSheets(filePath),
       fileName,
