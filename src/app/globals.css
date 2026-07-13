@@ -1561,6 +1561,23 @@ label[aria-disabled="true"] {
   padding: 14% 5% 11%;
 }
 
+/* The letterhead as a real image layer behind the content (see the .tsx note).
+   Absolutely positioned so it leaves the flex flow; content is lifted above it. */
+.quotation-letterhead-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.quotation-page > *:not(.quotation-letterhead-bg) {
+  position: relative;
+  z-index: 1;
+}
+
 .quotation-brand-header,
 .quotation-page-heading,
 .quotation-continuation-client,

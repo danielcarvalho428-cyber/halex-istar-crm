@@ -678,17 +678,6 @@ function Builder() {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
 
-  // Decode a letterhead image so it's cached and paints immediately once it
-  // becomes the page background — otherwise printToPDF can snapshot the Medicone
-  // page before its (just-swapped) background finishes decoding.
-  const decodeImage = (url: string) =>
-    new Promise<void>((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve();
-      img.onerror = () => resolve();
-      img.src = url;
-    });
-
   async function saveQuotation(generatePdf = false) {
     if (!client || lines.length === 0) return;
     const invalidLine = lines.find((line) => {
@@ -785,21 +774,27 @@ function Builder() {
             : "Cotação salva no computador.",
         );
         if (generatePdf) {
-          // Decode both letterheads up front so switching the page background to
-          // Medicone paints before printToPDF captures it.
-          await Promise.all(
-            [letterhead?.dataUrl, mediconeLetterhead?.dataUrl]
-              .filter((url): url is string => Boolean(url))
-              .map((url) => decodeImage(url)),
-          );
           // Render and export one brand at a time so each PDF gets only that
           // brand's items and letterhead.
           for (const brand of brands) {
             setPrintBrand(brand);
             await nextPaint();
-            // Give the swapped background image a moment to composite before the
-            // snapshot (the Medicone PNG is large and only just became visible).
-            await new Promise((resolve) => setTimeout(resolve, 200));
+            // Deterministically wait for the rendered letterhead image(s) to
+            // finish decoding before the snapshot — otherwise a large letterhead
+            // (e.g. the high-res Medicone PNG) is captured blank.
+            const letterheadImgs = Array.from(
+              document.querySelectorAll<HTMLImageElement>(".print-document .quotation-letterhead-bg"),
+            );
+            await Promise.all(
+              letterheadImgs.map((img) =>
+                img.complete && img.naturalWidth > 0
+                  ? img.decode().catch(() => {})
+                  : new Promise<void>((resolve) => {
+                      img.onload = () => resolve();
+                      img.onerror = () => resolve();
+                    }),
+              ),
+            );
             await nextPaint();
             await window.halexDesktop.quotations.pdf(
               `${BRAND_IDENTITY[brand].prefix}-${baseSuffix}`,
@@ -1373,10 +1368,20 @@ function Builder() {
               <article
                 key={pageIndex}
                 className={`quotation-page ${activeLetterhead?.dataUrl ? "quotation-page-letterhead" : "quotation-page-standard"}`}
-                style={activeLetterhead?.dataUrl
-                  ? { backgroundImage: `url(${activeLetterhead.dataUrl})` }
-                  : undefined}
               >
+                {activeLetterhead?.dataUrl && (
+                  // A real <img> (not a CSS background) so its decode can be
+                  // awaited before printToPDF and it reliably prints — large
+                  // background images were being captured before they painted.
+                  // next/image is unsuitable here (local data-URL, print output).
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={activeLetterhead.dataUrl}
+                    alt=""
+                    aria-hidden
+                    className="quotation-letterhead-bg"
+                  />
+                )}
                 {!activeLetterhead?.dataUrl && (
                   <header className="quotation-brand-header">
                     <div>
