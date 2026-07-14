@@ -24,6 +24,14 @@ const catalog: ProductLike[] = [
   { id: "p-cipro-100", code: "11", description: "Ciprofloxacino 2 mg/ml", presentation: "Bolsa 100 ml", brand: "Halex Istar" },
   // A non-Halex-ish product that must NOT get matched to unrelated specs.
   { id: "p-agua-10", code: "12", description: "Água para Injeção", presentation: "Frasco 10 ml", brand: "Halex Istar" },
+  // Composed-name and brand/generic alias products.
+  { id: "p-glicofis-500", code: "13", description: "Glicofisiológico", presentation: "Bolsa 500 ml, sistema fechado", brand: "Halex Istar" },
+  { id: "p-norposil", code: "14", description: "Noprosil", presentation: "Ampola 10 mg/2 ml", brand: "Halex Istar" },
+  { id: "p-ondan", code: "15", description: "Ondansetrona 2 mg/ml", presentation: "Ampola 4 ml", brand: "Halex Istar" },
+  { id: "p-plasmaistar", code: "16", description: "Plasmaistar", presentation: "Bolsa 500 ml, sistema fechado", brand: "Halex Istar" },
+  { id: "p-ringer-simples-500", code: "18", description: "Ringer Simples", presentation: "Bolsa 500 ml, sistema fechado", brand: "Halex Istar" },
+  { id: "p-beca", code: "19", description: "Beca 1 mg/ml", presentation: "Ampola 5 ml", brand: "Halex Istar" },
+  { id: "p-cymevir", code: "20", description: "Cymevir", presentation: "Bolsa 100 ml, sistema fechado", brand: "Halex Istar" },
 ];
 
 function matchId(description: string) {
@@ -79,7 +87,7 @@ test("returns no match for a substance we do not carry", () => {
 test("ringer spec that lists cloreto de sódio still matches ringer, not NaCl", () => {
   assert.equal(
     matchId("SOLUÇÃO RINGER SIMPLES 500ML - ESPECIFICAÇÃO: CLORETO DE SÓDIO 8,6 MG/ML + CLORETO DE POTÁSSIO 0,30 MG/ML"),
-    "p-ringer-500", // catalog has only "Ringer com Lactato" as a ringer; must not be NaCl
+    "p-ringer-simples-500", // must be the plain ringer, never NaCl
   );
 });
 
@@ -91,6 +99,50 @@ test("a substance we do not carry does not confidently borrow another drug's con
     catalog,
   );
   assert.notEqual(result.productId, "p-kcl-10");
+});
+
+test("composed 'glicose associada ao cloreto de sódio' matches glicofisiológico, not plain glicose", () => {
+  assert.equal(
+    matchId("GLICOSE, COMPOSIÇÃO:ASSOCIADA AO CLORETO DE SÓDIO, CONCENTRAÇAO:5% + 0,9%, FORMA FARMACEUTICA:SOLUÇÃO INJETÁVEL, CARACTERISTICA ADICIONAL:SISTEMA FECHADO 500ML"),
+    "p-glicofis-500",
+  );
+});
+
+test("plain glicose (no cloreto) still matches glicose, not glicofisiológico", () => {
+  assert.equal(
+    matchId("GLICOSE, CONCENTRAÇÃO:5%, CARACTERÍSTICAS ADICIONAIS:SISTEMA FECHADO 500ML"),
+    "p-glic5-500",
+  );
+});
+
+test("brand ↔ generic aliases: metoclopramida→Noprosil, nausedron→Ondansetrona", () => {
+  assert.equal(
+    matchId("METOCLOPRAMIDA 5MG/ML - SOLUÇÃO INJETÁVEL, AMPOLA COM 2ML"),
+    "p-norposil",
+  );
+  assert.equal(
+    matchId("NAUSEDRON 2MG/ML - ONDANSETRONA, SOLUÇÃO INJETÁVEL AMPOLA 4ML"),
+    "p-ondan",
+  );
+});
+
+test("more brand ↔ generic aliases: ganciclovir→Cymevir, metoprolol→Beca", () => {
+  assert.equal(matchId("GANCICLOVIR 1MG/ML - SOLUÇÃO PARA INFUSÃO, BOLSA 100ML"), "p-cymevir");
+  assert.equal(matchId("METOPROLOL 1MG/ML - SOLUÇÃO INJETÁVEL, AMPOLA 5ML"), "p-beca");
+});
+
+test("plasmaistar recognized from its gluconate+acetate composition, not plain NaCl", () => {
+  assert.equal(
+    matchId("CLORETO DE SÓDIO, COMPOSIÇÃO:ASSOC. GLICONATO SÓDIO, ACETATO SÓDIO, KCL, MGCL2, CONCENTRAÇAO:5,26 + 5,02 + 3,68 + 0,37 + 0,3 MG/ML, SISTEMA FECHADO 500ML"),
+    "p-plasmaistar",
+  );
+});
+
+test("ringer com lactato recognized from its electrolyte composition", () => {
+  assert.equal(
+    matchId("SOLUÇÃO ELETROLÍTICA 500ML - SÓDIO 130 MEQ/L, POTÁSSIO 4 MEQ/L, CÁLCIO 2,7 MEQ/L, LACTATO 27,7 MEQ/L, CLORETO 109 MEQ/L"),
+    "p-ringer-500",
+  );
 });
 
 test("normalizeText strips accents and collapses separators", () => {

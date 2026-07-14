@@ -73,15 +73,95 @@ const STOPWORDS = new Set([
   "assoc", "simples", "medicamento", "produto",
 ]);
 
-// Substance words: alphabetic tokens (>=3 chars) that aren't stopwords.
+// ---------------------------------------------------------------------------
+// PRODUCT ALIASES — the same product reaches us under different names depending
+// on the distribuidora/manufacturer. Add entries here as you discover them.
+//
+//   canonical  — a word that appears in OUR product's name/presentation.
+//   synonyms   — other single words that mean the same product (brand ↔ generic).
+//                Matched in both directions, so it doesn't matter whether the
+//                catalog uses the brand or the generic name.
+//   requireAll — for products written out as a composition instead of a name:
+//                if EVERY word in one of these groups appears in the request,
+//                the canonical is credited (e.g. glicose + cloreto + sódio →
+//                glicofisiológico). Use lowercase, no accents.
+// ---------------------------------------------------------------------------
+type AliasGroup = {
+  canonical: string;
+  synonyms?: string[];
+  requireAll?: string[][];
+};
+
+const ALIAS_GROUPS: AliasGroup[] = [
+  // Our catalog abbreviates "CLOR." for cloreto — normalize it so "CLOR. SODIO"
+  // fully matches a request's "CLORETO DE SÓDIO".
+  { canonical: "cloreto", synonyms: ["clor"] },
+  // Halex brand names ↔ the generic name distribuidoras usually send (verified
+  // against the bulas). The product is the brand and there's no separate generic
+  // product, so aliasing the generic to it lets a generic-named request find it.
+  { canonical: "noprosil", synonyms: ["metoclopramida", "metoclopramido", "plasil", "norposil"] }, // metoclopramida
+  { canonical: "ondansetrona", synonyms: ["nausedron", "vonau", "zofran", "modifical"] },
+  { canonical: "halexminophen", synonyms: ["paracetamol", "acetaminofeno", "acetaminophen"] }, // paracetamol injetável
+  { canonical: "nalbli", synonyms: ["nalbufina", "nalbufino"] }, // nalbufina
+  { canonical: "cymevir", synonyms: ["ganciclovir"] },
+  { canonical: "axiflennid", synonyms: ["cetoprofeno", "ketoprofeno"] },
+  { canonical: "clize", synonyms: ["clonidina"] },
+  { canonical: "beca", synonyms: ["metoprolol"] },
+  { canonical: "lizbi", synonyms: ["linezolida", "linezolid"] },
+  { canonical: "plasmin", synonyms: ["hidroxietilamido", "hidroxietil"] }, // amido hidroxietílico (HES)
+  // Composed-name products that arrive written as their composition instead of
+  // by name. Each requireAll lists tokens unique enough to identify the product.
+  {
+    // Glicofisiológico = "glicose associada ao cloreto de sódio 5% + 0,9%".
+    canonical: "glicofisiologico",
+    synonyms: ["glicofisiologica", "glicofisiologia"],
+    requireAll: [["glicose", "cloreto", "sodio"], ["glicose", "fisiologico"]],
+  },
+  {
+    // Plasmaistar = solução de eletrólitos com gliconato + acetato de sódio.
+    canonical: "plasmaistar",
+    requireAll: [["gliconato", "acetato"]],
+  },
+  {
+    // Ringer com lactato escrito como composição (lactato + cálcio + potássio).
+    canonical: "ringer",
+    requireAll: [["lactato", "calcio", "potassio"]],
+  },
+];
+
+// term → canonical (both directions collapse to the canonical token).
+const TOKEN_SYNONYMS = new Map<string, string>();
+for (const group of ALIAS_GROUPS) {
+  TOKEN_SYNONYMS.set(group.canonical, group.canonical);
+  for (const synonym of group.synonyms ?? []) TOKEN_SYNONYMS.set(synonym, group.canonical);
+}
+const ALIAS_RULES = ALIAS_GROUPS.filter((group) => group.requireAll?.length).map((group) => ({
+  canonical: group.canonical,
+  requireAll: group.requireAll!,
+}));
+
+// Substance words: alphabetic tokens (>=3 chars) that aren't stopwords, mapped
+// through the synonym table so brand and generic names collapse together.
 function substanceTokens(normalized: string): Set<string> {
   const tokens = new Set<string>();
   for (const raw of normalized.split(/[^a-z]+/)) {
     if (raw.length < 3) continue;
     if (STOPWORDS.has(raw)) continue;
-    tokens.add(raw);
+    tokens.add(TOKEN_SYNONYMS.get(raw) ?? raw);
   }
   return tokens;
+}
+
+// Canonicals credited because all the words of a requireAll group are present —
+// how a composed spec ("glicose … cloreto … sódio") resolves to a product name.
+function aliasHits(tokens: Set<string>): Set<string> {
+  const hits = new Set<string>();
+  for (const rule of ALIAS_RULES) {
+    if (rule.requireAll.some((group) => group.every((word) => tokens.has(word)))) {
+      hits.add(rule.canonical);
+    }
+  }
+  return hits;
 }
 
 // Volumes in millilitres — "500ml", "500 ml", "100ML". Litres are converted.
@@ -115,14 +195,20 @@ type Signature = {
   substances: Set<string>;
   volumes: Set<number>;
   concentrations: Set<number>;
+  // Canonicals credited via a requireAll rule — tracked so a composed-name match
+  // (glicofisiológico) can outweigh a partial one (plain glicose).
+  aliases: Set<string>;
 };
 
 function signatureOf(text: string): Signature {
   const normalized = normalizeText(text);
+  const base = substanceTokens(normalized);
+  const aliases = aliasHits(base);
   return {
-    substances: substanceTokens(normalized),
+    substances: new Set([...base, ...aliases]),
     volumes: volumes(normalized),
     concentrations: concentrations(normalized),
+    aliases,
   };
 }
 
@@ -140,9 +226,12 @@ function headOf(text: string): string {
 type RequestSignature = Signature & { headSubstances: Set<string> };
 
 function requestSignatureOf(text: string): RequestSignature {
+  const full = signatureOf(text);
   return {
-    ...signatureOf(text),
-    headSubstances: substanceTokens(headOf(text)),
+    ...full,
+    // An alias hit is a strong product identifier wherever it appears, so it
+    // counts toward the head even when the composition is in the spec tail.
+    headSubstances: new Set([...substanceTokens(headOf(text)), ...full.aliases]),
   };
 }
 
@@ -185,6 +274,9 @@ function scoreSignature(want: RequestSignature, have: Signature): number {
   if (fullSubstanceMatch && have.concentrations.size && want.concentrations.size) {
     score += anyShared(want.concentrations, have.concentrations) ? 4 : -3;
   }
+  // A composed-name alias match (e.g. glicofisiológico) is a decisive signal —
+  // enough to win over a product that only matched one of its component words.
+  score += sharedCount(want.aliases, have.substances) * 6;
   return score;
 }
 
