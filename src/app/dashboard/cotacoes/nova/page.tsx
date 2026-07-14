@@ -155,6 +155,9 @@ function Builder() {
   const [lines, setLines] = useState<QuoteLine[]>([]);
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
+  // Narrow the "Adicionar produtos" list to a single invoicing brand so it isn't
+  // one long scroll of both catalogs.
+  const [brandFilter, setBrandFilter] = useState<"all" | BillingBrand>("all");
   const [validDays, setValidDays] = useState(15);
   const [payment, setPayment] = useState("30/45/60 Dias");
   const [paymentIsCustom, setPaymentIsCustom] = useState(false);
@@ -546,12 +549,17 @@ function Builder() {
   );
   const filtered = useMemo(
     () =>
-      products.filter((item) =>
-        `${item.code} ${item.description}`
+      products.filter((item) => {
+        if (
+          brandFilter !== "all" &&
+          normalizeBillingBrand(item.brand) !== brandFilter
+        )
+          return false;
+        return `${item.code} ${item.description}`
           .toLowerCase()
-          .includes(search.toLowerCase()),
-      ),
-    [products, search],
+          .includes(search.toLowerCase());
+      }),
+    [products, search, brandFilter],
   );
   // A line's billing brand comes from its product (Medicone products are
   // brand=Medicone); the stored line.brand is a fallback for legacy rows.
@@ -1140,27 +1148,50 @@ function Builder() {
                 onKeyDown={(event) => { if (event.key === "Enter" && filtered[0]) { event.preventDefault(); add(filtered[0].id); } }}
               />
             </div>
-            <div className="mt-3 divide-y divide-stone-100">
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              {([
+                { value: "all", label: "Todas" },
+                { value: "Halex Istar", label: "Halex" },
+                { value: "Medicone", label: "Medicone" },
+              ] as const).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setBrandFilter(option.value)}
+                  className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold transition ${
+                    brandFilter === option.value
+                      ? "bg-amber-600 text-white"
+                      : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+              <span className="ml-auto whitespace-nowrap text-[11px] font-semibold text-stone-400">
+                {filtered.length} produtos
+              </span>
+            </div>
+            <div className="mt-3 max-h-[28rem] divide-y divide-stone-100 overflow-y-auto">
+              {filtered.length === 0 && (
+                <p className="py-6 text-center text-sm text-stone-500">
+                  Nenhum produto encontrado.
+                </p>
+              )}
               {filtered.map((product) => (
-                <div key={product.id} className="flex items-center gap-3 py-3">
+                <div key={product.id} className="flex items-center gap-3 py-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">
+                    <p className="truncate text-sm font-semibold">
                       {product.description}
                     </p>
-                    <p className="mt-1 text-xs text-stone-500">
-                      {product.code} · {product.presentation}
+                    <p className="mt-0.5 truncate text-xs text-stone-500">
+                      {product.code} · {product.presentation} · cx {Math.max(1, product.packSize || 1)}
+                      {product.brand ? ` · ${product.brand}` : ""}
                     </p>
-                    <p className="mt-1 text-[11px] font-semibold text-amber-800">Caixa com {Math.max(1, product.packSize || 1)} unidade(s)</p>
-                    {product.brand && (
-                      <p className="mt-0.5 text-[11px] font-semibold text-stone-600">
-                        Marca: {product.brand}
-                      </p>
-                    )}
                   </div>
                   <button
                     type="button"
                     onClick={() => add(product.id)}
-                    className="brand-secondary inline-flex h-9 w-9 items-center justify-center"
+                    className="brand-secondary inline-flex h-8 w-8 shrink-0 items-center justify-center"
                     title="Adicionar produto"
                   >
                     <Plus size={15} />
