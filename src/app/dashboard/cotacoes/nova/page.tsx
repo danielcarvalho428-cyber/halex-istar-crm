@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { FileDown, Plus, Printer, Search, Trash2 } from "lucide-react";
+import { FileDown, FileSpreadsheet, Plus, Printer, Search, Trash2, X } from "lucide-react";
 import { useAppUX } from "@/components/AppUX";
 import {
   appDate,
@@ -18,6 +18,11 @@ import {
   useDesktopSalesPriceTableMedicone,
 } from "@/lib/use-desktop-data";
 import { agreementPriceFor } from "@/lib/agreement-pricing";
+import {
+  parsePregaoWorkbook,
+  matchPregaoDescription,
+  type MatchConfidence,
+} from "@/lib/pregao-import";
 import {
   formatQuotationPriceInput,
   parseQuotationPriceInput,
@@ -100,6 +105,18 @@ type RepresentativeDetails = {
   phone: string;
 };
 
+// One line of the pregão-import review panel: what the distribuidora asked for,
+// which of our products it matched, and whether it will be added.
+type ImportReviewRow = {
+  key: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  productId: string | null;
+  confidence: MatchConfidence;
+  include: boolean;
+};
+
 // Local-time YYYY-MM-DD so the stored/printed date matches the quote number's
 // local day instead of shifting a day forward near midnight (UTC-3).
 function toDateInput(date: Date) {
@@ -173,9 +190,7 @@ function Builder() {
   );
   const [seller, setSeller] = useState("Paulo Roberto");
   const [freight, setFreight] = useState("CIF - incluso no valor da proposta");
-  const [notes, setNotes] = useState(
-    "Preços expressos em reais. Produtos sujeitos à disponibilidade no momento da confirmação do pedido.",
-  );
+  const [notes, setNotes] = useState("");
   const [representative, setRepresentative] = useState<RepresentativeDetails>({
     email: "",
     role: "Representante comercial",
@@ -202,6 +217,22 @@ function Builder() {
   // it is flipped to each brand in turn so the on-screen pages — which printToPDF
   // captures — contain only that brand's items and its letterhead.
   const [printBrand, setPrintBrand] = useState<BillingBrand | null>(null);
+  // "Cliente avulso": a cotação (typically a distribuidora participating in a
+  // pregão) whose client isn't cadastrado. We just take a free-text name and a
+  // pricing tier instead of a client record.
+  const [clientMode, setClientMode] = useState<"cadastrado" | "avulso">("cadastrado");
+  const [avulsoName, setAvulsoName] = useState("");
+  const [avulsoType, setAvulsoType] = useState<"hospital" | "distribuidor">("distribuidor");
+  // Whether "Gerar PDF" also persists the cotação to history. Off = generate the
+  // document to send without keeping a saved record.
+  const [saveToHistory, setSaveToHistory] = useState(true);
+  // Pregão import: read a distribuidora's spreadsheet, match rows to our
+  // catalog, and review before the matched items become cotação lines.
+  const [importReview, setImportReview] = useState<ImportReviewRow[] | null>(null);
+  const [importFileName, setImportFileName] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importTier, setImportTier] = useState<"hospital" | "distribuidor">("distribuidor");
+  const pregaoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (editId || lines.length === 0) return;
@@ -400,6 +431,12 @@ function Builder() {
     () => new Map(clients.map((item) => [item.id, item])),
     [clients],
   );
+  // Products sorted for the pregão-import review dropdowns (so the user can
+  // correct a match to any catalog product).
+  const productOptions = useMemo(
+    () => [...products].sort((a, b) => a.description.localeCompare(b.description, "pt-BR")),
+    [products],
+  );
 
   // The initial clientId is a preview id; once the real client list loads, snap
   // to the first real client so the dropdown reflects a valid, selectable choice.
@@ -425,36 +462,51 @@ function Builder() {
     [importedMediconeTable],
   );
 
-  const priceForClient = useCallback((productId: string, selectedClientId = clientId, units = 1) => {
-    const product = productById.get(productId);
-    if (!product) return 0;
-    const selectedClient = clientById.get(selectedClientId);
-    const isDistribuidor = selectedClient?.clientType === "distribuidor";
-    const legacyPrice = isDistribuidor
-      ? (product.priceDistribuidor ?? product.price)
-      : (product.priceHospital ?? product.price);
-    // Medicone has a single table with two tiers (hospital / distribuidor) chosen
-    // by the client type; quantity-break faixas override the base tier price when
-    // the ordered units reach a breakpoint. Halex Istar uses region × category.
-    let importedPrice: number | undefined;
-    if (normalizeBillingBrand(product.brand) === "Medicone") {
-      const tier = mediconeTier(product.code, isDistribuidor, units);
-      importedPrice = tier
-        ? tier.price
-        : importedMediconeTable?.prices?.default?.[isDistribuidor ? "distribuidor" : "hospital"]?.[product.code];
-    } else {
-      importedPrice = importedSalesPriceTable?.prices?.[salesPriceRegion]?.[salesPriceTable]?.[product.code];
-    }
-    // No baked-in price table: use the imported (current) table, else the
-    // product's own catalog price — never a hardcoded, silently-stale value.
-    const fallbackPrice = importedPrice ?? legacyPrice;
-    return agreementPriceFor(
-      agreements,
-      selectedClientId,
-      product.code,
-      fallbackPrice,
-    );
-  }, [agreements, clientId, clientById, importedSalesPriceTable, importedMediconeTable, mediconeTier, productById, salesPriceRegion, salesPriceTable]);
+  // Whether pricing should use the distribuidor tier — from the cadastrado
+  // client's type, or from the avulso tier when there's no client record.
+  const resolveIsDistribuidor = useCallback(
+    (selectedClientId = clientId) =>
+      clientMode === "avulso"
+        ? avulsoType === "distribuidor"
+        : clientById.get(selectedClientId)?.clientType === "distribuidor",
+    [clientMode, avulsoType, clientById, clientId],
+  );
+
+  // Core pricing given an explicit tier — used both by the normal client-driven
+  // path and by the pregão import (which prices against a chosen tier before a
+  // client is even settled).
+  const priceForTier = useCallback(
+    (productId: string, isDistribuidor: boolean, units = 1, selectedClientId = clientId) => {
+      const product = productById.get(productId);
+      if (!product) return 0;
+      const legacyPrice = isDistribuidor
+        ? (product.priceDistribuidor ?? product.price)
+        : (product.priceHospital ?? product.price);
+      // Medicone has a single table with two tiers (hospital / distribuidor) chosen
+      // by the client type; quantity-break faixas override the base tier price when
+      // the ordered units reach a breakpoint. Halex Istar uses region × category.
+      let importedPrice: number | undefined;
+      if (normalizeBillingBrand(product.brand) === "Medicone") {
+        const tier = mediconeTier(product.code, isDistribuidor, units);
+        importedPrice = tier
+          ? tier.price
+          : importedMediconeTable?.prices?.default?.[isDistribuidor ? "distribuidor" : "hospital"]?.[product.code];
+      } else {
+        importedPrice = importedSalesPriceTable?.prices?.[salesPriceRegion]?.[salesPriceTable]?.[product.code];
+      }
+      // No baked-in price table: use the imported (current) table, else the
+      // product's own catalog price — never a hardcoded, silently-stale value.
+      const fallbackPrice = importedPrice ?? legacyPrice;
+      return agreementPriceFor(agreements, selectedClientId, product.code, fallbackPrice);
+    },
+    [agreements, clientId, importedSalesPriceTable, importedMediconeTable, mediconeTier, productById, salesPriceRegion, salesPriceTable],
+  );
+
+  const priceForClient = useCallback(
+    (productId: string, selectedClientId = clientId, units = 1) =>
+      priceForTier(productId, resolveIsDistribuidor(selectedClientId), units, selectedClientId),
+    [priceForTier, resolveIsDistribuidor, clientId],
+  );
 
   // Total units currently on a line, used to resolve the Medicone faixa.
   const lineUnits = useCallback(
@@ -484,6 +536,24 @@ function Builder() {
       );
     }
   }, [clientId, products, clients, productById, agreements, priceForClient, lineUnits]);
+
+  // Reprice when the avulso tier (or mode) changes, mirroring the client-change
+  // reprice — an avulso cotação has no clientId to key that effect off.
+  const previousAvulsoTierRef = useRef(`${clientMode}:${avulsoType}`);
+  useEffect(() => {
+    const key = `${clientMode}:${avulsoType}`;
+    if (previousAvulsoTierRef.current === key) return;
+    previousAvulsoTierRef.current = key;
+    if (products.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPriceDrafts({});
+    setLines((current) =>
+      current.map((line) => ({
+        ...line,
+        unitPrice: priceForClient(line.productId, clientId, lineUnits(line)),
+      })),
+    );
+  }, [clientMode, avulsoType, products, priceForClient, clientId, lineUnits]);
 
   useEffect(() => {
     if (
@@ -539,7 +609,21 @@ function Builder() {
     );
   }, [agreements, editId, productById, priceForClient, clientId, lineUnits]);
 
-  const client = clientById.get(clientId) || clients[0];
+  // The client the document is built for: a cadastrado record, or a synthetic
+  // one from the avulso name/tier when the client isn't registered.
+  const cadastradoClient = clientById.get(clientId) || clients[0];
+  const client =
+    clientMode === "avulso"
+      ? {
+          id: "__avulso__",
+          code: "",
+          name: avulsoName.trim() || "Cliente",
+          city: "",
+          state: "",
+          cnpj: undefined as string | undefined,
+          clientType: avulsoType,
+        }
+      : cadastradoClient;
   const salesPriceRegions = importedSalesPriceTable?.regions ?? SALES_PRICE_REGIONS;
   const salesPriceTables = importedSalesPriceTable?.categories ?? SALES_PRICE_TABLES;
   const salesPricePeriod = importedSalesPriceTable?.period ?? "não importada";
@@ -642,12 +726,12 @@ function Builder() {
     (productId: string) => {
       const product = productById.get(productId);
       if (!product || normalizeBillingBrand(product.brand) !== "Medicone") return false;
-      const isDistribuidor = clientById.get(clientId)?.clientType === "distribuidor";
+      const isDistribuidor = resolveIsDistribuidor();
       return Boolean(
         importedMediconeTable?.tiers?.[isDistribuidor ? "distribuidor" : "hospital"]?.[product.code]?.length,
       );
     },
-    [productById, clientById, clientId, importedMediconeTable],
+    [productById, resolveIsDistribuidor, importedMediconeTable],
   );
 
   function add(productId: string) {
@@ -710,8 +794,113 @@ function Builder() {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
 
+  // Reads a distribuidora's pregão spreadsheet in memory (never saved), matches
+  // each row to our catalog, and opens the review panel. The file is discarded.
+  async function handlePregaoFile(file: File) {
+    setImportBusy(true);
+    setNotice("");
+    try {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(await file.arrayBuffer(), { cellDates: false });
+      const sheets = workbook.SheetNames.map((name) => ({
+        name,
+        matrix: XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name], {
+          header: 1,
+          blankrows: false,
+          defval: "",
+        }),
+      }));
+      const parsed = parsePregaoWorkbook(sheets);
+      if (!parsed || parsed.rows.length === 0) {
+        setNotice("Não foi possível ler itens desta planilha. Verifique se há uma coluna de descrição.");
+        return;
+      }
+      const review: ImportReviewRow[] = parsed.rows.map((row, index) => {
+        const match = matchPregaoDescription(row.description, products);
+        return {
+          key: String(index),
+          description: row.description,
+          quantity: row.quantity,
+          unit: row.unit,
+          productId: match.productId,
+          confidence: match.confidence,
+          // Auto-include confident matches; leave uncertain ones for the user.
+          include: match.confidence === "high" || match.confidence === "medium",
+        };
+      });
+      setImportFileName(file.name);
+      setImportReview(review);
+    } catch {
+      setNotice("Erro ao ler a planilha. Envie um arquivo .xlsx, .xls ou .csv.");
+    } finally {
+      setImportBusy(false);
+      if (pregaoInputRef.current) pregaoInputRef.current.value = "";
+    }
+  }
+
+  // Turns the confirmed review rows into cotação lines, priced at the chosen
+  // tier. Quantities from a pregão are in units, and rows mapping to the same
+  // product are merged so a product never appears twice.
+  function applyImport() {
+    if (!importReview) return;
+    const chosen = importReview.filter((row) => row.include && row.productId);
+    if (chosen.length === 0) {
+      setImportReview(null);
+      return;
+    }
+    const isDistribuidor = importTier === "distribuidor";
+    setLines((current) => {
+      const next = [...current];
+      for (const row of chosen) {
+        const product = productById.get(row.productId!);
+        if (!product) continue;
+        const packSize = Math.max(1, product.packSize || 1);
+        const units = row.quantity > 0 ? row.quantity : packSize;
+        const existingIndex = next.findIndex((line) => line.productId === row.productId);
+        if (existingIndex > -1) {
+          const existing = next[existingIndex];
+          const existingUnits =
+            existing.quantityMode === "units"
+              ? existing.unitQuantity ?? existing.quantity * packSize
+              : existing.quantity * packSize;
+          const totalUnits = existingUnits + units;
+          next[existingIndex] = {
+            ...existing,
+            quantityMode: "units",
+            unitQuantity: totalUnits,
+            quantity: Math.max(1, Math.ceil(totalUnits / packSize)),
+            unitPrice: priceForTier(row.productId!, isDistribuidor, totalUnits, clientId),
+          };
+        } else {
+          next.push({
+            productId: row.productId!,
+            quantity: Math.max(1, Math.ceil(units / packSize)),
+            unitPrice: priceForTier(row.productId!, isDistribuidor, units, clientId),
+            brand: product.brand || "",
+            quantityMode: "units",
+            unitQuantity: units,
+          });
+        }
+      }
+      return next;
+    });
+    setPriceDrafts({});
+    // Keep later repricing consistent with the tier the items were imported at.
+    if (clientMode === "avulso") setAvulsoType(importTier);
+    const added = chosen.length;
+    setImportReview(null);
+    setNotice(`${added} ${added === 1 ? "item adicionado" : "itens adicionados"} à cotação a partir da planilha.`);
+  }
+
   async function saveQuotation(generatePdf = false) {
     if (!client || lines.length === 0) return;
+    if (clientMode === "avulso" && !avulsoName.trim()) {
+      setNotice("Informe o nome do cliente avulso (distribuidora ou hospital).");
+      return;
+    }
+    // "Salvar" always persists; "Gerar PDF" persists only when the user opted to
+    // keep the cotação in history.
+    const persist = generatePdf ? saveToHistory : true;
     const invalidLine = lines.find((line) => {
       return lineHasInvalidQuantity(line);
     });
@@ -797,15 +986,17 @@ function Builder() {
     setSaving(true);
     try {
       if (window.halexDesktop) {
-        for (const quote of quotes) {
-          await window.halexDesktop.quotations.save(quote.record);
+        if (persist) {
+          for (const quote of quotes) {
+            await window.halexDesktop.quotations.save(quote.record);
+          }
+          setSavedId(base);
+          setNotice(
+            multiBrand
+              ? "Cotações salvas no computador (uma por marca)."
+              : "Cotação salva no computador.",
+          );
         }
-        setSavedId(base);
-        setNotice(
-          multiBrand
-            ? "Cotações salvas no computador (uma por marca)."
-            : "Cotação salva no computador.",
-        );
         if (generatePdf) {
           // Render and export one brand at a time so each PDF gets only that
           // brand's items and letterhead.
@@ -836,35 +1027,47 @@ function Builder() {
           }
           setPrintBrand(null);
           setNotice(
-            multiBrand
-              ? "Cotações salvas e 2 PDFs gerados na pasta Cotações (Halex Istar e Medicone)."
-              : "Cotação salva e PDF gerado na pasta Cotações.",
+            persist
+              ? (multiBrand
+                  ? "Cotações salvas e 2 PDFs gerados na pasta Cotações (Halex Istar e Medicone)."
+                  : "Cotação salva e PDF gerado na pasta Cotações.")
+              : (multiBrand
+                  ? "2 PDFs gerados na pasta Cotações (sem salvar no histórico)."
+                  : "PDF gerado na pasta Cotações (sem salvar no histórico)."),
           );
         }
       } else {
-        let manualQuotations: Array<StoredQuote | typeof quotes[number]["record"]> = [];
-        try {
-          const parsed = JSON.parse(localStorage.getItem("manualQuotations") || "[]");
-          if (Array.isArray(parsed)) manualQuotations = parsed;
-        } catch {}
-        for (const quote of quotes) {
-          const index = manualQuotations.findIndex(
-            (item) => String(item.id) === quote.record.id,
+        if (persist) {
+          let manualQuotations: Array<StoredQuote | typeof quotes[number]["record"]> = [];
+          try {
+            const parsed = JSON.parse(localStorage.getItem("manualQuotations") || "[]");
+            if (Array.isArray(parsed)) manualQuotations = parsed;
+          } catch {}
+          for (const quote of quotes) {
+            const index = manualQuotations.findIndex(
+              (item) => String(item.id) === quote.record.id,
+            );
+            if (index > -1) manualQuotations[index] = quote.record;
+            else manualQuotations.push(quote.record);
+          }
+          localStorage.setItem("manualQuotations", JSON.stringify(manualQuotations));
+          setSavedId(base);
+          setNotice(
+            multiBrand
+              ? "Cotações salvas localmente (uma por marca)."
+              : "Cotação salva localmente com sucesso.",
           );
-          if (index > -1) manualQuotations[index] = quote.record;
-          else manualQuotations.push(quote.record);
         }
-        localStorage.setItem("manualQuotations", JSON.stringify(manualQuotations));
-        setSavedId(base);
-        setNotice(
-          multiBrand
-            ? "Cotações salvas localmente (uma por marca)."
-            : "Cotação salva localmente com sucesso.",
-        );
         if (generatePdf) window.print();
       }
-      localStorage.removeItem("quotationWorkingDraft");
-      toast(generatePdf ? "Cotação salva e PDF preparado." : "Cotação salva com segurança.");
+      // Keep the recovery draft when we deliberately didn't persist, so an
+      // unsaved cotação isn't lost after generating its PDF.
+      if (persist) localStorage.removeItem("quotationWorkingDraft");
+      toast(
+        generatePdf
+          ? (persist ? "Cotação salva e PDF preparado." : "PDF preparado (sem salvar).")
+          : "Cotação salva com segurança.",
+      );
     } catch {
       setPrintBrand(null);
       setNotice("Não foi possível salvar a cotação. Tente novamente.");
@@ -874,8 +1077,137 @@ function Builder() {
     }
   }
 
+  const importIncludedCount = importReview
+    ? importReview.filter((row) => row.include && row.productId).length
+    : 0;
+  const importMatchedCount = importReview
+    ? importReview.filter((row) => row.productId).length
+    : 0;
+  const confidenceBadge: Record<MatchConfidence, { label: string; className: string }> = {
+    high: { label: "Alta", className: "bg-emerald-100 text-emerald-800" },
+    medium: { label: "Média", className: "bg-amber-100 text-amber-800" },
+    low: { label: "Baixa", className: "bg-orange-100 text-orange-800" },
+    none: { label: "Sem correspondência", className: "bg-stone-200 text-stone-600" },
+  };
+
   return (
     <div className="space-y-6 pb-16">
+      {importReview && (
+        <div className="print-hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="flex max-h-[88vh] w-full max-w-3xl flex-col rounded-xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-stone-200 p-5">
+              <div className="min-w-0">
+                <h2 className="font-semibold">Revisar itens da planilha</h2>
+                <p className="mt-1 truncate text-xs text-stone-500">
+                  {importFileName} · {importMatchedCount} de {importReview.length} itens reconhecidos como nossos
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setImportReview(null)}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-stone-500"
+                title="Fechar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 border-b border-stone-100 px-5 py-3">
+              <span className="text-xs font-bold text-stone-600">Preço:</span>
+              {([
+                { value: "distribuidor", label: "Distribuidor" },
+                { value: "hospital", label: "Hospital" },
+              ] as const).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setImportTier(option.value)}
+                  className={`rounded-full px-3 py-1 text-xs font-bold transition ${
+                    importTier === option.value
+                      ? "bg-amber-600 text-white"
+                      : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+              <span className="ml-auto text-xs text-stone-500">
+                Marque os itens que deseja incluir e corrija o produto quando necessário.
+              </span>
+            </div>
+            <div className="min-h-0 flex-1 divide-y divide-stone-100 overflow-y-auto px-5">
+              {importReview.map((row, index) => {
+                const badge = confidenceBadge[row.confidence];
+                return (
+                  <div key={row.key} className="flex items-start gap-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={row.include}
+                      onChange={(e) =>
+                        setImportReview((current) =>
+                          current
+                            ? current.map((item, i) => (i === index ? { ...item, include: e.target.checked } : item))
+                            : current,
+                        )
+                      }
+                      className="mt-1 h-4 w-4 shrink-0 accent-amber-600"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-stone-500" title={row.description}>
+                        {row.description.length > 90 ? `${row.description.slice(0, 90)}…` : row.description}
+                        {row.quantity > 0 && <span className="font-semibold text-stone-700"> · {row.quantity} un</span>}
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                        <select
+                          className="form-input min-w-0 flex-1 px-2 py-1 text-xs"
+                          value={row.productId ?? ""}
+                          onChange={(e) =>
+                            setImportReview((current) =>
+                              current
+                                ? current.map((item, i) =>
+                                    i === index
+                                      ? { ...item, productId: e.target.value || null, include: e.target.value ? item.include : false }
+                                      : item,
+                                  )
+                                : current,
+                            )
+                          }
+                        >
+                          <option value="">— não é nosso produto —</option>
+                          {productOptions.map((product) => (
+                            <option key={product.id} value={product.id}>
+                              {product.description} · {product.presentation} ({product.brand || "—"})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-stone-200 p-5">
+              <button
+                type="button"
+                onClick={() => setImportReview(null)}
+                className="brand-secondary px-4 py-2 text-xs font-bold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={applyImport}
+                disabled={importIncludedCount === 0}
+                className="brand-button px-4 py-2 text-xs font-bold"
+              >
+                Adicionar {importIncludedCount} {importIncludedCount === 1 ? "item" : "itens"} à cotação
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <header className="print-hidden page-hero flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="lumina-kicker">Gerador comercial</p>
@@ -955,20 +1287,64 @@ function Builder() {
           <section className="glass-card p-5">
             <h2 className="font-semibold">Cliente e condições</h2>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <label className="text-xs font-bold md:col-span-3">
-                Cliente
-                <select
-                  className="form-input mt-2 w-full"
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                >
-                  {clients.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.code} · {item.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="md:col-span-3 flex flex-wrap items-center gap-1.5">
+                {([
+                  { value: "cadastrado", label: "Cliente cadastrado" },
+                  { value: "avulso", label: "Cliente avulso (sem cadastro)" },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setClientMode(option.value)}
+                    className={`rounded-full px-3 py-1 text-xs font-bold transition ${
+                      clientMode === option.value
+                        ? "bg-amber-600 text-white"
+                        : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              {clientMode === "cadastrado" ? (
+                <label className="text-xs font-bold md:col-span-3">
+                  Cliente
+                  <select
+                    className="form-input mt-2 w-full"
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                  >
+                    {clients.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.code} · {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <>
+                  <label className="text-xs font-bold md:col-span-2">
+                    Nome do cliente (distribuidora ou hospital)
+                    <input
+                      className="form-input mt-2 w-full"
+                      value={avulsoName}
+                      onChange={(e) => setAvulsoName(e.target.value)}
+                      placeholder="Ex: Distribuidora Saúde Ltda"
+                    />
+                  </label>
+                  <label className="text-xs font-bold">
+                    Tipo (define o preço)
+                    <select
+                      className="form-input mt-2 w-full"
+                      value={avulsoType}
+                      onChange={(e) => setAvulsoType(e.target.value === "distribuidor" ? "distribuidor" : "hospital")}
+                    >
+                      <option value="distribuidor">Distribuidor</option>
+                      <option value="hospital">Hospital</option>
+                    </select>
+                  </label>
+                </>
+              )}
               <label className="text-xs font-bold md:col-span-3">
                 Região da tabela · {salesPricePeriod}
                 <select
@@ -1096,6 +1472,16 @@ function Builder() {
                 />
                 Enviar sem preços — apenas a lista de produtos e unidades por caixa
               </label>
+              <label className="md:col-span-3 flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-xs font-bold text-stone-700">
+                <input
+                  type="checkbox"
+                  checked={saveToHistory}
+                  onChange={(e) => setSaveToHistory(e.target.checked)}
+                  className="h-4 w-4 accent-amber-600"
+                />
+                Salvar cotação no histórico ao gerar PDF
+                <span className="font-normal text-stone-500">— desmarque para apenas gerar o PDF sem guardar</span>
+              </label>
               <fieldset className="md:col-span-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
                 <legend className="px-1 text-[10px] font-bold uppercase tracking-wider text-stone-500">
                   Representante
@@ -1125,7 +1511,7 @@ function Builder() {
 
           <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(430px,1.1fr)]">
           <section className="glass-card order-2 p-5 xl:order-1">
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="font-semibold">Adicionar produtos</h2>
                 <p className="mt-1 text-xs text-stone-500">
@@ -1134,6 +1520,26 @@ function Builder() {
                     : "Tabela comercial Halex Istar. Produtos sem preço podem ser preenchidos manualmente."}
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => pregaoInputRef.current?.click()}
+                disabled={importBusy || products.length === 0}
+                className="brand-secondary inline-flex shrink-0 items-center gap-1.5 px-2.5 py-2 text-xs font-bold"
+                title="Importar planilha de pregão de uma distribuidora e montar a cotação só com os nossos produtos"
+              >
+                <FileSpreadsheet size={15} />
+                {importBusy ? "Lendo…" : "Importar pregão"}
+              </button>
+              <input
+                ref={pregaoInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="sr-only"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void handlePregaoFile(file);
+                }}
+              />
             </div>
             <div className="relative mt-4">
               <Search
@@ -1301,7 +1707,7 @@ function Builder() {
                 const appliedFaixa = tiered
                   ? mediconeTier(
                       product.code,
-                      clientById.get(clientId)?.clientType === "distribuidor",
+                      resolveIsDistribuidor(),
                       quotationLineUnits(line.quantityMode, line.quantity, line.unitQuantity, packSize),
                     )
                   : null;

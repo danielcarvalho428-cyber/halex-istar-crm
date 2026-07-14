@@ -57,3 +57,6 @@ next-env.d.ts
 
 # large OCR language binary (provided by @tesseract.js-data/por; not bundled by electron-builder)
 por.traineddata
+
+# Local sample files (distribuidora pregão sheets) — never commit
+samples/
