@@ -109,6 +109,8 @@ const ALIAS_GROUPS: AliasGroup[] = [
   { canonical: "beca", synonyms: ["metoprolol"] },
   { canonical: "lizbi", synonyms: ["linezolida", "linezolid"] },
   { canonical: "plasmin", synonyms: ["hidroxietilamido", "hidroxietil"] }, // amido hidroxietílico (HES)
+  { canonical: "quevatryl", synonyms: ["granisetrona", "granisetron"] }, // cloridrato de granisetrona
+  { canonical: "lowe", synonyms: ["adenosina"] },
   // Composed-name products that arrive written as their composition instead of
   // by name. Each requireAll lists tokens unique enough to identify the product.
   {

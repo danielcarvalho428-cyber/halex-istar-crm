@@ -32,6 +32,8 @@ const catalog: ProductLike[] = [
   { id: "p-ringer-simples-500", code: "18", description: "Ringer Simples", presentation: "Bolsa 500 ml, sistema fechado", brand: "Halex Istar" },
   { id: "p-beca", code: "19", description: "Beca 1 mg/ml", presentation: "Ampola 5 ml", brand: "Halex Istar" },
   { id: "p-cymevir", code: "20", description: "Cymevir", presentation: "Bolsa 100 ml, sistema fechado", brand: "Halex Istar" },
+  { id: "p-quevatryl", code: "21", description: "Quevatryl 0,06 mg/ml", presentation: "Bolsa 50 ml, sistema fechado", brand: "Halex Istar" },
+  { id: "p-lowe", code: "22", description: "Lowe 3 mg/ml", presentation: "Ampola 2 ml", brand: "Halex Istar" },
 ];
 
 function matchId(description: string) {
@@ -129,6 +131,11 @@ test("brand ↔ generic aliases: metoclopramida→Noprosil, nausedron→Ondanset
 test("more brand ↔ generic aliases: ganciclovir→Cymevir, metoprolol→Beca", () => {
   assert.equal(matchId("GANCICLOVIR 1MG/ML - SOLUÇÃO PARA INFUSÃO, BOLSA 100ML"), "p-cymevir");
   assert.equal(matchId("METOPROLOL 1MG/ML - SOLUÇÃO INJETÁVEL, AMPOLA 5ML"), "p-beca");
+});
+
+test("brand ↔ generic aliases: granisetrona→Quevatryl, adenosina→Lowe", () => {
+  assert.equal(matchId("GRANISETRONA 0,06MG/ML - SOLUÇÃO PARA INFUSÃO, BOLSA 50ML"), "p-quevatryl");
+  assert.equal(matchId("ADENOSINA 3MG/ML - SOLUÇÃO INJETÁVEL, AMPOLA COM 2ML"), "p-lowe");
 });
 
 test("plasmaistar recognized from its gluconate+acetate composition, not plain NaCl", () => {
