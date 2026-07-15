@@ -221,6 +221,9 @@ interface HalexDesktopApi {
     }>;
     activeSalesPriceTable(): Promise<DesktopSalesPriceTable | null>;
     activeSalesPriceTableMedicone(): Promise<DesktopSalesPriceTable | null>;
+    // Extracts the text of a cotação/pregão PDF (text layer, OCR fallback for
+    // scanned files) so it can be parsed into items in the renderer.
+    pregaoPdf(data: ArrayBuffer): Promise<string>;
   };
   updates: {
     check(): Promise<{

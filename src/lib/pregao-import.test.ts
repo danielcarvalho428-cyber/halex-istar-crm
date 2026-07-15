@@ -4,6 +4,7 @@ import {
   matchPregaoDescription,
   parsePregaoMatrix,
   parsePregaoWorkbook,
+  parsePregaoText,
   normalizeText,
   type ProductLike,
 } from "./pregao-import.ts";
@@ -187,6 +188,25 @@ test("parses a misaligned sheet (quantity sits under the UND header)", () => {
   assert.equal(parsed.quantityColumn, 2);
   assert.equal(parsed.rows[0].quantity, 2250);
   assert.equal(parsed.rows[1].quantity, 1400);
+});
+
+test("parses items from a hospital cotação PDF text layout", () => {
+  const text = [
+    "Seq. Qtde. Un. Descrição Conv Vl. Unitário Desc. IPI Entrega",
+    "72 750,00 Bs Cloreto De Sodio 0,9% Bolsa 500ml 1",
+    "7 3.000,00 amp Agua Destilada Ampola 10ml 1",
+    "96 20,00 amp Nalbufina 10mg/ml Inj. 1",
+    "MARCA: HIPOLABOR",
+    "Impresso em: 15/07/2026 16:48:19 Página 2 Marilia WSUP485",
+  ].join("\n");
+  const parsed = parsePregaoText(text);
+  assert.ok(parsed);
+  assert.equal(parsed.rows.length, 3); // header, MARCA and footer skipped
+  assert.equal(parsed.rows[0].description, "Cloreto De Sodio 0,9% Bolsa 500ml");
+  assert.equal(parsed.rows[0].quantity, 750);
+  assert.equal(parsed.rows[0].unit, "Bs");
+  assert.equal(parsed.rows[1].quantity, 3000); // "3.000,00" → 3000
+  assert.equal(parsed.rows[2].description, "Nalbufina 10mg/ml Inj.");
 });
 
 test("workbook parse picks the sheet with the most rows", () => {

@@ -20,6 +20,7 @@ import {
 import { agreementPriceFor } from "@/lib/agreement-pricing";
 import {
   parsePregaoWorkbook,
+  parsePregaoText,
   matchPregaoDescription,
   type MatchConfidence,
 } from "@/lib/pregao-import";
@@ -800,19 +801,31 @@ function Builder() {
     setImportBusy(true);
     setNotice("");
     try {
-      const XLSX = await import("xlsx");
-      const workbook = XLSX.read(await file.arrayBuffer(), { cellDates: false });
-      const sheets = workbook.SheetNames.map((name) => ({
-        name,
-        matrix: XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name], {
-          header: 1,
-          blankrows: false,
-          defval: "",
-        }),
-      }));
-      const parsed = parsePregaoWorkbook(sheets);
+      let parsed;
+      if (/\.pdf$/i.test(file.name)) {
+        // PDF text extraction (incl. OCR for scanned files) runs in the desktop
+        // app; the web build can't read PDFs.
+        if (!window.halexDesktop?.imports?.pregaoPdf) {
+          setNotice("A leitura de PDF está disponível no aplicativo instalado. Para PDF, use o app; no navegador envie Excel ou CSV.");
+          return;
+        }
+        const text = await window.halexDesktop.imports.pregaoPdf(await file.arrayBuffer());
+        parsed = parsePregaoText(text);
+      } else {
+        const XLSX = await import("xlsx");
+        const workbook = XLSX.read(await file.arrayBuffer(), { cellDates: false });
+        const sheets = workbook.SheetNames.map((name) => ({
+          name,
+          matrix: XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name], {
+            header: 1,
+            blankrows: false,
+            defval: "",
+          }),
+        }));
+        parsed = parsePregaoWorkbook(sheets);
+      }
       if (!parsed || parsed.rows.length === 0) {
-        setNotice("Não foi possível ler itens desta planilha. Verifique se há uma coluna de descrição.");
+        setNotice("Não foi possível ler itens deste arquivo. Verifique se há uma lista de produtos com descrição.");
         return;
       }
       const review: ImportReviewRow[] = parsed.rows.map((row, index) => {
@@ -1525,7 +1538,7 @@ function Builder() {
                 onClick={() => pregaoInputRef.current?.click()}
                 disabled={importBusy || products.length === 0}
                 className="brand-secondary inline-flex shrink-0 items-center gap-1.5 px-2.5 py-2 text-xs font-bold"
-                title="Importar planilha de pregão de uma distribuidora e montar a cotação só com os nossos produtos"
+                title="Importar cotação (Excel, CSV ou PDF) de um cliente e montar a cotação só com os nossos produtos"
               >
                 <FileSpreadsheet size={15} />
                 {importBusy ? "Lendo…" : "Importar cotação"}
@@ -1533,7 +1546,7 @@ function Builder() {
               <input
                 ref={pregaoInputRef}
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept=".xlsx,.xls,.csv,.pdf"
                 className="sr-only"
                 onChange={(event) => {
                   const file = event.target.files?.[0];

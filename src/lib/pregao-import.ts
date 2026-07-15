@@ -431,3 +431,31 @@ export function parsePregaoWorkbook(
   }
   return best;
 }
+
+// --- PDF text parsing ------------------------------------------------------
+
+// Extracts item rows from the text of a PDF cotação/pregão. Common hospital
+// "Cotação de Preços" layouts print one item per line as
+//   <seq> <qtde> <unidade> <descrição> <conv>
+// e.g. "72 750,00 Bs Cloreto De Sodio 0,9% Bolsa 500ml 1". We detect that shape
+// by the Brazilian quantity (digits with a decimal comma) right after the item
+// number, which normal prose never has, so headers/footers/MARCA lines are
+// skipped. The trailing single-digit "Conv" column, when present, is dropped.
+export function parsePregaoText(text: string): PregaoParse | null {
+  if (!text) return null;
+  const lineRe = /^\s*(\d{1,4})\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+([A-Za-zÀ-ÿ./]{1,6})\s+(.+?)\s*$/;
+  const rows: PregaoRow[] = [];
+  text.split(/\r?\n/).forEach((raw, index) => {
+    const line = raw.trim();
+    const match = line.match(lineRe);
+    if (!match) return;
+    const [, seq, qtde, unit, rest] = match;
+    // Drop the trailing "Conv" column (a lone digit) if the row carried it.
+    const description = rest.replace(/\s+\d{1,2}$/, "").trim();
+    // Require some real words so a stray numeric line isn't taken as an item.
+    if ((description.match(/[A-Za-zÀ-ÿ]/g) || []).length < 4) return;
+    rows.push({ sourceRow: index + 1, item: seq, description, quantity: toNumber(qtde), unit });
+  });
+  if (rows.length === 0) return null;
+  return { sheetName: "PDF", descriptionColumn: -1, quantityColumn: null, rows };
+}

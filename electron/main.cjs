@@ -667,6 +667,45 @@ function registerIpc() {
       await parser.destroy();
     }
   });
+  // Generic cotação/pregão PDF text extraction for the Nova Cotação importer.
+  // Uses the PDF's text layer when it has one; falls back to Portuguese OCR for
+  // scanned/image PDFs. Returns plain text for the renderer to parse into items.
+  ipcMain.handle("imports:pregao:pdf", async (_event, input) => {
+    const data = Buffer.from(input || []);
+    if (!data.length || data.length > 30 * 1024 * 1024) {
+      throw new Error("O PDF deve ter no máximo 30 MB.");
+    }
+    const { PDFParse } = require("pdf-parse");
+    const parser = new PDFParse({ data });
+    let worker;
+    try {
+      const extracted = await parser.getText();
+      const text = extracted.text || "";
+      // A real text layer has plenty of letters; if not, the PDF is scanned.
+      if ((text.match(/[A-Za-zÀ-ÿ]/g) || []).length > 200) return text;
+      const screenshots = await parser.getScreenshot({
+        desiredWidth: 1800,
+        imageBuffer: true,
+        imageDataUrl: false,
+      });
+      if (screenshots.pages.length > 30) throw new Error("O PDF possui mais de 30 páginas.");
+      const { createWorker } = require("tesseract.js");
+      const portugueseOcr = require("@tesseract.js-data/por");
+      worker = await createWorker("por", 1, {
+        langPath: portugueseOcr.langPath,
+        gzip: portugueseOcr.gzip,
+      });
+      const pages = [];
+      for (const page of screenshots.pages) {
+        const recognized = await worker.recognize(page.data);
+        pages.push(recognized.data.text);
+      }
+      return pages.join("\n");
+    } finally {
+      if (worker) await worker.terminate();
+      await parser.destroy();
+    }
+  });
   ipcMain.handle("billing:email:history", () => emailHistory());
   ipcMain.handle("billing:email:send", async (_event, input) => {
     const to = String(input?.to || "").trim().toLowerCase();

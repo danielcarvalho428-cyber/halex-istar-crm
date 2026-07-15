@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld("halexDesktop", {
     activeSalesPriceTable: () => ipcRenderer.invoke("sales-prices:active"),
     activeSalesPriceTableMedicone: () =>
       ipcRenderer.invoke("sales-prices:active:medicone"),
+    pregaoPdf: (data) => ipcRenderer.invoke("imports:pregao:pdf", data),
   },
   updates: {
     check: () => ipcRenderer.invoke("updates:check"),
