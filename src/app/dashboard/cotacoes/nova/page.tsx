@@ -1528,7 +1528,7 @@ function Builder() {
                 title="Importar planilha de pregão de uma distribuidora e montar a cotação só com os nossos produtos"
               >
                 <FileSpreadsheet size={15} />
-                {importBusy ? "Lendo…" : "Importar pregão"}
+                {importBusy ? "Lendo…" : "Importar cotação"}
               </button>
               <input
                 ref={pregaoInputRef}
