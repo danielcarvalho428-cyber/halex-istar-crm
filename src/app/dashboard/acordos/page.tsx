@@ -28,6 +28,9 @@ export default function AgreementsPage() {
   const [clientId, setClientId] = useState("");
   const [productCode, setProductCode] = useState("");
   const [specialPrice, setSpecialPrice] = useState("");
+  // For each imported price whose code isn't in the catalog, the product the user
+  // picked to assign it to (keyed by the orphan code).
+  const [assignCode, setAssignCode] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -115,6 +118,22 @@ export default function AgreementsPage() {
     setSpecialPrice("");
   }
 
+  // Moves an imported price from an unmatched code onto the product the user
+  // chose, so it links to the catalog (and prices cotações). The negotiated
+  // price is preserved.
+  async function reassignPrice(oldCode: string, newCode: string, price: number) {
+    if (!window.halexDesktop || !selected || !newCode || newCode === oldCode) return;
+    await perform(async () => {
+      await window.halexDesktop!.agreements.savePrice(selected.id, newCode, price);
+      await window.halexDesktop!.agreements.deletePrice(selected.id, oldCode);
+    }, "Produto atribuído ao preço do acordo.");
+    setAssignCode((current) => {
+      const next = { ...current };
+      delete next[oldCode];
+      return next;
+    });
+  }
+
   async function importPrices() {
     if (!window.halexDesktop || !selected) return;
     if (selected.prices.length > 0 && !confirm(`Substituir os ${selected.prices.length} preços atuais do grupo ${selected.name}?`)) return;
@@ -185,7 +204,32 @@ export default function AgreementsPage() {
 
             <section className="glass-card overflow-hidden">
               <form onSubmit={(event) => void addPrice(event)} className="border-b border-stone-200 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="flex items-center gap-2 font-semibold"><Tag size={17} className="text-amber-700" /> Tabela de preços do grupo</h2><p className="mt-1 text-xs text-stone-500">Esta tabela vale somente para clientes de {selected.name}.</p>{selected.price_table_name && <p className="mt-1 text-xs font-semibold text-amber-800">Arquivo atual: {selected.price_table_name}</p>}</div><button type="button" disabled={busy} onClick={() => void importPrices()} className="brand-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-bold"><UploadCloud size={14} /> Importar planilha</button></div><div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_auto]"><select required className="form-input min-w-0" value={productCode} onChange={(event) => setProductCode(event.target.value)}><option value="">Selecione um produto</option>{products.map((product) => <option key={product.id} value={product.code}>{product.code} · {product.description}</option>)}</select><input required type="number" min="0.01" step="0.01" className="form-input" value={specialPrice} onChange={(event) => setSpecialPrice(event.target.value)} placeholder="Preço especial" /><button disabled={busy} className="brand-button px-4 py-2 text-xs font-bold">Salvar preço</button></div></form>
-              {selected.prices.length === 0 ? <p className="p-6 text-sm text-stone-500">Nenhum preço especial cadastrado.</p> : <div className="divide-y divide-stone-100">{selected.prices.map((price) => <div key={price.product_code} className="flex items-center justify-between gap-4 p-4"><div><p className="text-sm font-semibold">{price.description || price.product_code}</p><p className="mt-1 font-mono text-xs text-stone-500">{price.product_code}</p></div><div className="flex items-center gap-3"><p className="font-bold text-emerald-800">{money(Number(price.price))}</p><button type="button" aria-label={`Excluir preço ${price.product_code}`} onClick={() => void perform(() => window.halexDesktop!.agreements.deletePrice(selected.id, price.product_code), "Preço especial excluído.")} className="rounded-lg border border-stone-200 p-2 text-stone-500 hover:text-red-700"><Trash2 size={14} /></button></div></div>)}</div>}
+              {selected.prices.length === 0 ? <p className="p-6 text-sm text-stone-500">Nenhum preço especial cadastrado.</p> : <div className="divide-y divide-stone-100">{selected.prices.map((price) => {
+                const unmatched = !price.description;
+                return (
+                  <div key={price.product_code} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      {unmatched
+                        ? <p className="text-sm font-semibold text-amber-800">Produto não encontrado no catálogo</p>
+                        : <p className="text-sm font-semibold">{price.description}</p>}
+                      <p className="mt-1 font-mono text-xs text-stone-500">Código {price.product_code}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                      {unmatched && (
+                        <>
+                          <select className="form-input min-w-0 max-w-[15rem] py-1.5 text-xs" value={assignCode[price.product_code] ?? ""} onChange={(event) => setAssignCode((current) => ({ ...current, [price.product_code]: event.target.value }))}>
+                            <option value="">Atribuir a um produto…</option>
+                            {products.map((product) => <option key={product.id} value={product.code}>{product.code} · {product.description}</option>)}
+                          </select>
+                          <button type="button" disabled={busy || !assignCode[price.product_code]} onClick={() => void reassignPrice(price.product_code, assignCode[price.product_code], Number(price.price))} className="brand-secondary px-3 py-1.5 text-xs font-bold disabled:opacity-50">Atribuir</button>
+                        </>
+                      )}
+                      <p className="font-bold text-emerald-800">{money(Number(price.price))}</p>
+                      <button type="button" aria-label={`Excluir preço ${price.product_code}`} onClick={() => void perform(() => window.halexDesktop!.agreements.deletePrice(selected.id, price.product_code), "Preço especial excluído.")} className="rounded-lg border border-stone-200 p-2 text-stone-500 hover:text-red-700"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                );
+              })}</div>}
             </section>
           </div>
         ) : (
