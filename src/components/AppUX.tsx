@@ -76,7 +76,7 @@ export function AppUXProvider({ children, simplified = false }: { children: Reac
   return <UXContext.Provider value={{ toast, confirm, openCommandPalette: () => setPaletteOpen(true) }}>
     <a href="#conteudo-principal" className="skip-link">Pular para o conteúdo</a>
     {children}
-    <div className="fixed right-4 top-4 z-[80] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2" role="status" aria-live="polite">
+    <div className="print-hidden fixed right-4 top-4 z-[80] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2" role="status" aria-live="polite">
       {toasts.map((item) => <div key={item.id} className={`toast-card ${item.kind}`}>
         {item.kind === "error" ? <TriangleAlert size={18} /> : <CheckCircle2 size={18} />}
         <span className="flex-1 text-sm font-semibold">{item.message}</span>

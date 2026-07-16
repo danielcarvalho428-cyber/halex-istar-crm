@@ -2031,6 +2031,12 @@ label[aria-disabled="true"] {
 
   body:has(.print-document) .quotation-page-letterhead {
     padding: 29mm 10mm 24mm !important;
+    /* Full A4 height so the letterhead image bleeds to the bottom edge — at
+       296mm a ~1mm white strip showed under edge-to-edge letterheads (Medicone).
+       Verified this still prints one physical page per quotation page. */
+    height: 297mm !important;
+    min-height: 297mm !important;
+    max-height: 297mm !important;
   }
 
   body:has(.print-document) .quotation-brand-header {
