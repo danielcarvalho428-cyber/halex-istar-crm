@@ -218,7 +218,9 @@ function signatureOf(text: string): Signature {
 // pulled in by a substance that only appears in another product's spec.
 function headOf(text: string): string {
   const normalized = normalizeText(text);
-  const cut = normalized.search(/,|;| - |:|\(|\bespecificacao\b|\bcomposicao\b|\bprincipio\b|\bdosagem\b|\bconcentracao\b/);
+  // NB: don't cut at "(" — Bionexo names put the real drug in a parenthetical,
+  // e.g. "SORO FISIOLOGICO (CLORETO DE SODIO 9MG/ML)".
+  const cut = normalized.search(/,|;| - |:|\bespecificacao\b|\bcomposicao\b|\bprincipio\b|\bdosagem\b|\bconcentracao\b/);
   return cut > 0 ? normalized.slice(0, cut) : normalized;
 }
 
@@ -439,6 +441,11 @@ export function parsePregaoWorkbook(
 // skipped. The trailing single-digit "Conv" column, when present, is dropped.
 export function parsePregaoText(text: string): PregaoParse | null {
   if (!text) return null;
+  // Bionexo "Relatório de resposta da cotação" is a different, multi-line layout.
+  if (/marca solicitada|qntd\.?\s*solicitada|relat[óo]rio de resposta/i.test(text)) {
+    const bionexo = parseBionexoText(text);
+    if (bionexo) return bionexo;
+  }
   const lineRe = /^\s*(\d{1,4})\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+([A-Za-zÀ-ÿ./]{1,6})\s+(.+?)\s*$/;
   const rows: PregaoRow[] = [];
   text.split(/\r?\n/).forEach((raw, index) => {
@@ -455,4 +462,51 @@ export function parsePregaoText(text: string): PregaoParse | null {
   });
   if (rows.length === 0) return null;
   return { sheetName: "PDF", descriptionColumn: -1, quantityColumn: null, rows };
+}
+
+// Parses a Bionexo cotação-response report. Each item is a block:
+//   "<n> Item"
+//   "<código>-<DESCRIÇÃO SOLICITADA> ... |  <embalagem> | <marca>"   (may wrap)
+//   "Marca Solicitada" / <marca>
+//   "Qntd. Solicitada" / <quantidade>
+//   "Embalagem" / <un> ...
+// We match on the SOLICITED description (the hospital's ask) and take the
+// solicited quantity — that's what the client is actually buying.
+export function parseBionexoText(text: string): PregaoParse | null {
+  const lines = text.split(/\r?\n/).map((line) => line.trim());
+  const rows: PregaoRow[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const marker = lines[i].match(/^(\d{1,4})\s+Item$/i);
+    if (!marker) continue;
+    const seq = marker[1];
+    // The solicited description spans the lines after the marker up to the first
+    // "|" (which separates description | embalagem | marca).
+    let description = "";
+    for (let j = i + 1; j < lines.length && j <= i + 5; j += 1) {
+      const line = lines[j];
+      if (!line) continue;
+      const pipe = line.indexOf("|");
+      if (pipe >= 0) {
+        description = `${description} ${line.slice(0, pipe)}`.trim();
+        break;
+      }
+      description = `${description} ${line}`.trim();
+    }
+    description = description.replace(/^\d+\s*-\s*/, "").trim(); // drop the Bionexo item code
+    // Solicited quantity: the number right after the "Qntd. Solicitada" label.
+    let quantity = 0;
+    for (let k = i + 1; k < lines.length && k <= i + 14; k += 1) {
+      if (/qntd\.?\s*solicitada/i.test(lines[k])) {
+        for (let q = k + 1; q < lines.length && q <= k + 2; q += 1) {
+          const value = toNumber(lines[q]);
+          if (value > 0) { quantity = value; break; }
+        }
+        break;
+      }
+    }
+    if (description && (description.match(/[A-Za-zÀ-ÿ]/g) || []).length >= 4) {
+      rows.push({ sourceRow: i + 1, item: seq, description, quantity, unit: "" });
+    }
+  }
+  return rows.length ? { sheetName: "Bionexo", descriptionColumn: -1, quantityColumn: null, rows } : null;
 }

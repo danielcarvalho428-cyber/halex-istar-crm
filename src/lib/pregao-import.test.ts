@@ -209,6 +209,34 @@ test("parses items from a hospital cotação PDF text layout", () => {
   assert.equal(parsed.rows[2].description, "Nalbufina 10mg/ml Inj.");
 });
 
+test("parses a Bionexo cotação-response report into solicited items", () => {
+  const text = [
+    "Relatório de resposta da cotação",
+    "204 Item",
+    "312-ONDANSETRONA 4MG (2MG/ML) - AMPOLA 2ML | Ampola |",
+    "BLAU/ NOVAFARMA/HYPOFARMA/HALEX ISTAR/CRISTALIA",
+    "Marca Solicitada",
+    "BLAU",
+    "Qntd. Solicitada",
+    "800",
+    "Embalagem",
+    "Ampola",
+    "248 Item",
+    "13812-SORO FISIOLOGICO 0.9% (CLORETO DE SODIO 9MG/ML) 100ML - ISENTO PVC | Bolsa | HALEX ISTAR",
+    "Qntd. Solicitada",
+    "2000",
+  ].join("\n");
+  const parsed = parsePregaoText(text);
+  assert.ok(parsed);
+  assert.equal(parsed.sheetName, "Bionexo");
+  assert.equal(parsed.rows.length, 2);
+  assert.equal(parsed.rows[0].description, "ONDANSETRONA 4MG (2MG/ML) - AMPOLA 2ML");
+  assert.equal(parsed.rows[0].quantity, 800);
+  assert.equal(parsed.rows[1].quantity, 2000);
+  // The solicited description still matches through the normal engine.
+  assert.equal(matchId(parsed.rows[1].description), "p-nacl09-100");
+});
+
 test("workbook parse picks the sheet with the most rows", () => {
   const parsed = parsePregaoWorkbook([
     { name: "Empty", matrix: [["nota"], [""]] },
