@@ -39,9 +39,6 @@ export type PregaoMatch = {
   productId: string | null;
   score: number;
   confidence: MatchConfidence;
-  // Best alternatives (including the winner) so the review UI can offer a quick
-  // pick without re-scoring the whole catalog.
-  candidates: Array<{ productId: string; score: number }>;
 };
 
 // --- text normalization ----------------------------------------------------
@@ -296,7 +293,7 @@ export function matchPregaoDescription(
 ): PregaoMatch {
   const want = requestSignatureOf(description);
   if (want.substances.size === 0) {
-    return { productId: null, score: 0, confidence: "none", candidates: [] };
+    return { productId: null, score: 0, confidence: "none" };
   }
   const scored = products
     .map((product) => ({
@@ -310,7 +307,7 @@ export function matchPregaoDescription(
     .sort((a, b) => b.score - a.score);
 
   if (scored.length === 0) {
-    return { productId: null, score: 0, confidence: "none", candidates: [] };
+    return { productId: null, score: 0, confidence: "none" };
   }
   const best = scored[0];
   const runnerUp = scored[1]?.score ?? 0;
@@ -318,7 +315,6 @@ export function matchPregaoDescription(
     productId: best.productId,
     score: best.score,
     confidence: confidenceFor(best.score, runnerUp),
-    candidates: scored.slice(0, 5),
   };
 }
 
@@ -450,8 +446,9 @@ export function parsePregaoText(text: string): PregaoParse | null {
     const match = line.match(lineRe);
     if (!match) return;
     const [, seq, qtde, unit, rest] = match;
-    // Drop the trailing "Conv" column (a lone digit) if the row carried it.
-    const description = rest.replace(/\s+\d{1,2}$/, "").trim();
+    // Drop the trailing "Conv" column if present. It's always "1" here, so match
+    // exactly that — matching any 1–2 digit tail would eat a size like "Nº 38".
+    const description = rest.replace(/\s+1$/, "").trim();
     // Require some real words so a stray numeric line isn't taken as an item.
     if ((description.match(/[A-Za-zÀ-ÿ]/g) || []).length < 4) return;
     rows.push({ sourceRow: index + 1, item: seq, description, quantity: toNumber(qtde), unit });

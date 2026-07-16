@@ -1905,14 +1905,18 @@ function Builder() {
                       <strong>{client.name}</strong>
                     </div>
                     <dl>
-                      <div><dt>CNPJ</dt><dd>{client.cnpj ?? "Não informado"}</dd></div>
-                      <div><dt>Cidade</dt><dd>{client.city}/{client.state}</dd></div>
+                      {(client.cnpj || clientMode === "cadastrado") && (
+                        <div><dt>CNPJ</dt><dd>{client.cnpj ?? "Não informado"}</dd></div>
+                      )}
+                      {(client.city || client.state) && (
+                        <div><dt>Cidade</dt><dd>{client.city}/{client.state}</dd></div>
+                      )}
                     </dl>
                   </section>
                 ) : (
                   <div className="quotation-continuation-client">
                     <strong>{client.name}</strong>
-                    <span>{client.city}/{client.state}</span>
+                    {(client.city || client.state) && <span>{client.city}/{client.state}</span>}
                   </div>
                 )}
 
