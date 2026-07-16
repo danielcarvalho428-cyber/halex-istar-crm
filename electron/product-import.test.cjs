@@ -1,6 +1,46 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { productRows, salesPriceTableFromSheets, mediconeSalesTableFromSheets } = require("./product-import.cjs");
+const { productRows, agreementPriceRows, salesPriceTableFromSheets, mediconeSalesTableFromSheets } = require("./product-import.cjs");
+
+test("agreement import reads unit prices despite a title row above the header", () => {
+  // Mirrors the "Registro de Acordo Comercial" workbook: a title row, a blank
+  // leading column, and a "PREÇO (unitário)" header.
+  const pairs = agreementPriceRows([
+    {
+      name: "Por código",
+      rows: [
+        ["", "Registro de Acordo Comercial", "", "", "", "", ""],
+        ["", "CÓD.", "DESCRIÇÃO", "", "", "PREÇO (unitário)", ""],
+        ["", 603, "ONDANSETRONA 4MG 2ML", "", "", 0.96, ""],
+        ["", 4124, "CLOR. SODIO 0,9% 100ML", "", "", 2.63, ""],
+      ],
+    },
+  ]);
+  assert.equal(pairs.length, 2);
+  assert.deepEqual(pairs[0], { code: "603", price: 0.96 });
+});
+
+test("agreement import prefers the unit-price sheet over a box-price sheet", () => {
+  const pairs = agreementPriceRows([
+    {
+      name: "Produtos",
+      rows: [
+        ["CÓD", "Produto", "ML", "QTDE CX", "Preço PF unit", "CÓD"],
+        [603, "ONDANSETRONA 4MG 2ML", 2, 100, 39.17, 603],
+      ],
+    },
+    {
+      name: "Por código",
+      rows: [
+        ["", "Registro de Acordo Comercial"],
+        ["", "CÓD.", "DESCRIÇÃO", "", "", "PREÇO (unitário)"],
+        ["", 603, "ONDANSETRONA 4MG 2ML", "", "", 0.96],
+      ],
+    },
+  ]);
+  const ondan = pairs.find((p) => p.code === "603");
+  assert.equal(ondan.price, 0.96); // unit price wins, not the 39.17 box price
+});
 
 test("imports the abbreviated headers from the real price workbook", () => {
   const [product] = productRows([

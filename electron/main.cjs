@@ -20,7 +20,7 @@ let _xlsx = null;
 const loadXlsx = () => (_xlsx ??= require("xlsx"));
 const { LocalDatabase } = require("./database.cjs");
 const defaultReferenceData = require("./defaults/reference-data.json");
-const { normalizeHeader, field, numberValue, productRows, salesPriceTableFromSheets, mediconeSalesTableFromSheets } = require("./product-import.cjs");
+const { normalizeHeader, field, numberValue, productRows, agreementPriceRows, salesPriceTableFromSheets, mediconeSalesTableFromSheets } = require("./product-import.cjs");
 const { parseNfePdfIdentity } = require("./nfe-document.cjs");
 
 let mainWindow;
@@ -390,7 +390,7 @@ function registerIpc() {
       fileName: path.basename(filePath),
       ...database.importAgreementPrices(
         groupId,
-        productRows(spreadsheetRows(filePath)),
+        agreementPriceRows(spreadsheetSheets(filePath)),
         path.basename(filePath),
       ),
     };

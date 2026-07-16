@@ -62,6 +62,67 @@ function productRows(rows) {
   }));
 }
 
+// Finds the código and (unit) price columns in a raw sheet, tolerating a title
+// row above the header (as in "Registro de Acordo Comercial" workbooks) and
+// price headers like "PREÇO (unitário)" / "Preço PF unit". Returns the extracted
+// { code, price } pairs plus whether the price column is an explicit unit price.
+function parseAgreementSheet(rows) {
+  let headerRow = -1;
+  let codeColumn = -1;
+  let priceColumn = -1;
+  let unitPrice = false;
+  for (let r = 0; r < Math.min(rows.length, 15); r += 1) {
+    const cells = rows[r] || [];
+    let code = -1;
+    let price = -1;
+    let unit = false;
+    cells.forEach((cell, c) => {
+      const header = normalizeHeader(cell);
+      if (!header) return;
+      if (code < 0 && (header === "cod" || header === "codigo" || header === "codprod" || header === "codigoproduto")) {
+        code = c;
+      }
+      if (header.includes("preco") || header.includes("valor")) {
+        // Prefer an explicit unit price column over any other price column.
+        if (price < 0 || header.includes("unitario")) {
+          price = c;
+          unit = header.includes("unitario");
+        }
+      }
+    });
+    if (code >= 0 && price >= 0) {
+      headerRow = r;
+      codeColumn = code;
+      priceColumn = price;
+      unitPrice = unit;
+      break;
+    }
+  }
+  if (headerRow < 0) return null;
+  const pairs = [];
+  for (let r = headerRow + 1; r < rows.length; r += 1) {
+    const cells = rows[r] || [];
+    const code = String(cells[codeColumn] ?? "").trim();
+    const price = numberValue(cells[priceColumn]);
+    if (code && price != null && price > 0) pairs.push({ code, price });
+  }
+  return pairs.length ? { pairs, unitPrice } : null;
+}
+
+// Extracts { code, price } pairs for an acordo from a workbook's sheets. When a
+// workbook has several sheets (e.g. "Por código" with unit prices and "Produtos"
+// with box prices), the sheet whose price column is an explicit unit price wins;
+// otherwise the first sheet that parses is used — so box prices don't override
+// the negotiated unit prices.
+function agreementPriceRows(sheets) {
+  const parsed = (sheets || [])
+    .map((sheet) => parseAgreementSheet(sheet.rows || []))
+    .filter(Boolean);
+  if (parsed.length === 0) return [];
+  const chosen = parsed.find((sheet) => sheet.unitPrice) || parsed[0];
+  return chosen.pairs;
+}
+
 function categoryDefinition(parent, child) {
   const group = normalizeHeader(parent);
   const mode = normalizeHeader(child).includes("dedicado") ? "dedicated" : "fractionated";
@@ -324,4 +385,4 @@ function mediconeSalesTableFromSheets(sheets, sourceName) {
   };
 }
 
-module.exports = { normalizeHeader, field, numberValue, productRows, salesPriceTableFromSheets, mediconeSalesTableFromSheets, parseMediconeTiers };
+module.exports = { normalizeHeader, field, numberValue, productRows, agreementPriceRows, parseAgreementSheet, salesPriceTableFromSheets, mediconeSalesTableFromSheets, parseMediconeTiers };
