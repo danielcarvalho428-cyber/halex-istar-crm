@@ -31,6 +31,8 @@ import {
 import {
   estimatedProductRowHeight,
   paginateQuotationRows,
+  LETTERHEAD_CAPACITIES,
+  STANDARD_CAPACITIES,
 } from "@/lib/quotation-pagination";
 import {
   isFullBoxQuantity,
@@ -717,8 +719,11 @@ function Builder() {
         ),
       }];
     });
-    return paginateQuotationRows(rows);
-  }, [visibleLines, productById]);
+    return paginateQuotationRows(
+      rows,
+      activeLetterhead?.dataUrl ? LETTERHEAD_CAPACITIES : STANDARD_CAPACITIES,
+    );
+  }, [visibleLines, productById, activeLetterhead?.dataUrl]);
 
   // True when a Medicone product has quantity-break faixas for the current
   // client tier — the only case where changing quantity should re-derive the
