@@ -74,7 +74,7 @@ export function AppUXProvider({ children, simplified = false }: { children: Reac
   const navigate = (href: string) => { setPaletteOpen(false); setQuery(""); router.push(href); };
 
   return <UXContext.Provider value={{ toast, confirm, openCommandPalette: () => setPaletteOpen(true) }}>
-    <a href="#conteudo-principal" className="skip-link">Pular para o conteúdo</a>
+    <a href="#conteudo-principal" className="skip-link print-hidden">Pular para o conteúdo</a>
     {children}
     <div className="print-hidden fixed right-4 top-4 z-[80] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2" role="status" aria-live="polite">
       {toasts.map((item) => <div key={item.id} className={`toast-card ${item.kind}`}>
