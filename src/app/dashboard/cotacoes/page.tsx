@@ -1,18 +1,110 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { FilePlus2, ReceiptText, Pencil, Trash2, Search } from "lucide-react";
+import { FilePlus2, FileSpreadsheet, ReceiptText, Pencil, Trash2, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { money } from "@/lib/crm-preview";
-import { notifyCrmDataChanged, useDesktopQuotations } from "@/lib/use-desktop-data";
+import {
+  notifyCrmDataChanged,
+  useDesktopClients,
+  useDesktopProducts,
+  useDesktopQuotations,
+} from "@/lib/use-desktop-data";
 import { useAppUX } from "@/components/AppUX";
+
+type StoredItem = Record<string, unknown>;
 
 export default function QuotationsPage() {
   const quotations = useDesktopQuotations();
+  const clients = useDesktopClients();
+  const products = useDesktopProducts();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("recentes");
+  const [exportingId, setExportingId] = useState<string | null>(null);
   const { confirm, toast } = useAppUX();
   const visible = useMemo(() => quotations.filter((quote) => `${quote.quote_number} ${quote.client_name}`.toLowerCase().includes(query.toLowerCase())).sort((a, b) => sort === "valor" ? Number(b.total_value) - Number(a.total_value) : String(b.issued_at).localeCompare(String(a.issued_at))), [quotations, query, sort]);
+
+  // Excel version of a saved cotação. Items are read back in full (the list rows
+  // carry only totals), and packSize comes from the catalog — falling back to the
+  // stored line total when the product no longer exists, so the sheet still adds
+  // up to the value shown in the history.
+  const handleExcel = async (id: string) => {
+    setExportingId(id);
+    try {
+      let quote: Record<string, unknown> | null = null;
+      if (window.halexDesktop) {
+        quote = (await window.halexDesktop.quotations.get(id)) as Record<string, unknown> | null;
+      } else {
+        const stored = JSON.parse(localStorage.getItem("manualQuotations") || "[]");
+        if (Array.isArray(stored)) {
+          quote = stored.find((row: Record<string, unknown>) => String(row.id) === id) ?? null;
+        }
+      }
+      const rawItems = (quote?.items as StoredItem[] | undefined) ?? [];
+      if (!quote || rawItems.length === 0) {
+        toast("Esta cotação não tem itens para exportar.", "error");
+        return;
+      }
+      const quoteNumber = String(quote.quote_number ?? id);
+      const brand = quoteNumber.startsWith("MC-") ? "Medicone" : "Halex Istar";
+      const client = clients.find((row) => String(row.id) === String(quote?.client_id));
+      const items = rawItems.map((item) => {
+        const productId = String(item.product_id ?? "");
+        const quantity = Number(item.quantity) || 0;
+        const unitPrice = Number(item.unit_price) || 0;
+        const catalogPackSize = products.find((row) => row.id === productId)?.packSize;
+        const derived =
+          quantity > 0 && unitPrice > 0
+            ? Math.round((Number(item.total_value) || 0) / (quantity * unitPrice))
+            : 1;
+        return {
+          code: String(item.code ?? ""),
+          description: String(item.description ?? ""),
+          presentation: String(item.presentation ?? ""),
+          brand: String(item.brand ?? brand),
+          packSize: Math.max(1, catalogPackSize || derived || 1),
+          quantityMode: item.quantity_mode === "units" ? ("units" as const) : ("boxes" as const),
+          quantity,
+          unitQuantity: item.unit_quantity == null ? null : Number(item.unit_quantity),
+          unitPrice,
+        };
+      });
+
+      const { buildQuotationSheet } = await import("@/lib/quotation-export");
+      const { downloadQuotationSheet } = await import("@/lib/quotation-excel");
+      await downloadQuotationSheet(
+        buildQuotationSheet({
+          brand,
+          quoteNumber,
+          client: {
+            name: String(quote.client_name ?? client?.name ?? "Cliente"),
+            cnpj: client?.cnpj ?? null,
+            city: client?.city ?? null,
+            state: client?.state ?? null,
+          },
+          issuedAt: String(quote.issued_at ?? ""),
+          validUntil: quote.valid_until ? String(quote.valid_until) : undefined,
+          payment: quote.payment_terms ? String(quote.payment_terms) : undefined,
+          delivery: quote.delivery_terms ? String(quote.delivery_terms) : undefined,
+          freight: quote.freight_terms ? String(quote.freight_terms) : undefined,
+          notes: quote.notes ? String(quote.notes) : undefined,
+          minimumBilling: quote.minimum_billing == null ? null : Number(quote.minimum_billing),
+          seller: quote.seller ? String(quote.seller) : undefined,
+          representativeRole: quote.representative_role ? String(quote.representative_role) : undefined,
+          representativePhone: quote.representative_phone ? String(quote.representative_phone) : undefined,
+          representativeEmail: quote.representative_email ? String(quote.representative_email) : undefined,
+          salesPriceTable: quote.sales_price_table ? String(quote.sales_price_table) : undefined,
+          salesPriceRegion: quote.sales_price_region ? String(quote.sales_price_region) : undefined,
+          items,
+        }),
+      );
+      toast("Excel da cotação gerado.");
+    } catch {
+      toast("Não foi possível gerar o Excel desta cotação.", "error");
+    } finally {
+      setExportingId(null);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     if (!await confirm({ title: "Excluir esta cotação?", description: "A proposta deixará de aparecer no histórico deste computador.", confirmLabel: "Excluir cotação", destructive: true })) return;
@@ -95,6 +187,16 @@ export default function QuotationsPage() {
                     </td>
                     <td className="px-4 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleExcel(String(quote.id))}
+                          disabled={exportingId === String(quote.id)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                          title="Exportar em Excel"
+                          aria-label={`Exportar cotação ${quote.quote_number} em Excel`}
+                        >
+                          <FileSpreadsheet size={14} />
+                        </button>
                         <Link
                           href={`/dashboard/cotacoes/nova?editId=${quote.id}`}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-900"

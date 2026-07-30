@@ -1095,6 +1095,80 @@ function Builder() {
     }
   }
 
+  // Excel version of the printed proposta: one .xlsx per invoicing brand, same
+  // split rule as the PDF, so each file can be sent to the client as-is.
+  async function exportExcel() {
+    if (!client || lines.length === 0) return;
+    if (hasInvalidQuantity) {
+      setNotice("A quantidade em unidades deve completar caixas inteiras.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { buildQuotationSheet } = await import("@/lib/quotation-export");
+      const { downloadQuotationSheet } = await import("@/lib/quotation-excel");
+      const baseSuffix = quoteNumber.replace(/^(HI|MC)-/, "");
+      for (const brand of brandsInQuote) {
+        const brandLines = lines.filter((line) => lineBrand(line) === brand);
+        const items = brandLines.flatMap((line) => {
+          const product = products.find((item) => item.id === line.productId);
+          if (!product) return [];
+          return [{
+            code: product.code,
+            description: product.description,
+            presentation: product.presentation,
+            brand,
+            packSize: Math.max(1, product.packSize || 1),
+            quantityMode: line.quantityMode || "boxes",
+            quantity: line.quantity,
+            unitQuantity: line.unitQuantity ?? null,
+            unitPrice: line.unitPrice,
+          }];
+        });
+        if (items.length === 0) continue;
+        await downloadQuotationSheet(
+          buildQuotationSheet({
+            brand,
+            quoteNumber: `${BRAND_IDENTITY[brand].prefix}-${baseSuffix}`,
+            client: {
+              name: client.name,
+              cnpj: client.cnpj ?? null,
+              city: client.city ?? null,
+              state: client.state ?? null,
+            },
+            issuedAt: toDateInput(issued),
+            validUntil: toDateInput(valid),
+            validDays,
+            payment,
+            delivery,
+            freight,
+            notes,
+            minimumBilling: parseQuotationPriceInput(minBilling[brand]) || null,
+            seller,
+            representativeRole: representative.role,
+            representativePhone: representative.phone,
+            representativeEmail: representative.email,
+            salesPriceTable,
+            salesPriceRegion,
+            hidePrices,
+            items,
+          }),
+        );
+      }
+      setNotice(
+        brandsInQuote.length > 1
+          ? "2 planilhas Excel geradas (Halex Istar e Medicone)."
+          : "Planilha Excel gerada.",
+      );
+      toast("Excel da cotação gerado.");
+    } catch {
+      setNotice("Não foi possível gerar o Excel da cotação.");
+      toast("Não foi possível gerar o Excel.", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const importIncludedCount = importReview
     ? importReview.filter((row) => row.include && row.productId).length
     : 0;
@@ -1245,6 +1319,16 @@ function Builder() {
           >
             <Printer size={15} />
             {saving ? "Salvando…" : "Salvar"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void exportExcel()}
+            disabled={saving || lines.length === 0}
+            className="brand-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-bold"
+            title="Exportar esta cotação em planilha Excel"
+          >
+            <FileSpreadsheet size={15} />
+            Excel
           </button>
           <button
             type="button"
