@@ -19,7 +19,6 @@ const base: QuotationExportInput = {
     {
       code: "200",
       description: "Glicose 5%",
-      presentation: "Bolsa 500 ml",
       packSize: 30,
       quantityMode: "boxes",
       quantity: 2,
@@ -28,7 +27,6 @@ const base: QuotationExportInput = {
     {
       code: "100",
       description: "Água para Injeção",
-      presentation: "Frasco 10 ml",
       packSize: 100,
       quantityMode: "units",
       quantity: 1,
@@ -46,9 +44,9 @@ test("item rows mirror the printed table: box price is per box, unit price per u
   const sheet = buildQuotationSheet(base);
   const rows = itemRows(sheet);
   assert.equal(rows.length, 2);
-  // Item, Código, Produto, Apresentação, Marca, Un./cx, Qtd. cx, Qtd. un, unit, total
-  assert.deepEqual(rows[0].cells, [1, "200", "Glicose 5%", "Bolsa 500 ml", "Halex Istar", 30, 2, 60, 300, 600]);
-  assert.deepEqual(rows[1].cells, [2, "100", "Água para Injeção", "Frasco 10 ml", "Halex Istar", 100, 1, 100, 1.5, 150]);
+  // Item, Código, Produto, Marca, Un./cx, Qtd. cx, Qtd. un, unit, total
+  assert.deepEqual(rows[0].cells, [1, "200", "Glicose 5%", "Halex Istar", 30, 2, 60, 300, 600]);
+  assert.deepEqual(rows[1].cells, [2, "100", "Água para Injeção", "Halex Istar", 100, 1, 100, 1.5, 150]);
   assert.equal(sheet.total, 750);
   assert.equal(sheet.itemCount, 2);
 });
@@ -63,10 +61,10 @@ test("the total row matches the sum of the line totals", () => {
 test("hiding prices drops the money and quantity columns entirely", () => {
   const sheet = buildQuotationSheet({ ...base, hidePrices: true, minimumBilling: 5000 });
   assert.equal(sheet.withPrices, false);
-  assert.equal(sheet.columnCount, 6);
-  assert.equal(sheet.columnWidths.length, 6);
+  assert.equal(sheet.columnCount, 5);
+  assert.equal(sheet.columnWidths.length, 5);
   assert.deepEqual(sheet.currencyColumns, []);
-  assert.equal(itemRows(sheet)[0].cells.length, 6);
+  assert.equal(itemRows(sheet)[0].cells.length, 5);
   assert.equal(sheet.rows.some((row) => row.kind === "total"), false);
   assert.equal(
     sheet.rows.some((row) => row.kind === "field" && row.label === "Faturamento mínimo"),
@@ -102,5 +100,5 @@ test("a Medicone quote keeps its own brand in the item rows", () => {
     quoteNumber: "MC-2607-1",
     items: [{ ...base.items[0], brand: undefined }],
   });
-  assert.equal(itemRows(sheet)[0].cells[4], "Medicone");
+  assert.equal(itemRows(sheet)[0].cells[3], "Medicone");
 });

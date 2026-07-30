@@ -9,7 +9,6 @@ import {
 export type QuotationExportItem = {
   code: string;
   description: string;
-  presentation?: string;
   brand?: string;
   packSize: number;
   quantityMode?: QuotationQuantityMode;
@@ -96,7 +95,6 @@ const PRICE_HEADERS = [
   "Item",
   "Código",
   "Produto",
-  "Apresentação",
   "Marca",
   "Un./cx",
   "Qtd. (cx)",
@@ -104,11 +102,11 @@ const PRICE_HEADERS = [
   "Preço unitário (R$)",
   "Total (R$)",
 ];
-const PRICE_WIDTHS = [6, 12, 44, 32, 14, 8, 10, 11, 19, 16];
+const PRICE_WIDTHS = [6, 12, 58, 14, 8, 10, 11, 19, 16];
 // Without prices the document is a technical item list, so quantities and money
 // columns are dropped entirely — same as the printed PDF.
-const PLAIN_HEADERS = ["Item", "Código", "Produto", "Apresentação", "Marca", "Un./cx"];
-const PLAIN_WIDTHS = [6, 12, 50, 38, 16, 8];
+const PLAIN_HEADERS = ["Item", "Código", "Produto", "Marca", "Un./cx"];
+const PLAIN_WIDTHS = [6, 12, 72, 16, 8];
 
 export function buildQuotationSheet(input: QuotationExportInput): QuotationSheet {
   const withPrices = !input.hidePrices;
@@ -159,7 +157,6 @@ export function buildQuotationSheet(input: QuotationExportInput): QuotationSheet
       index + 1,
       item.code,
       item.description,
-      item.presentation || "",
       item.brand || input.brand,
       packSize,
     ];
@@ -236,7 +233,7 @@ export function buildQuotationSheet(input: QuotationExportInput): QuotationSheet
     fileName: `cotacao-${slug(input.quoteNumber)}${clientPart ? `-${clientPart}` : ""}${withPrices ? "" : "-sem-precos"}.xlsx`,
     columnCount: headers.length,
     columnWidths: withPrices ? PRICE_WIDTHS : PLAIN_WIDTHS,
-    currencyColumns: withPrices ? [8, 9] : [],
+    currencyColumns: withPrices ? [7, 8] : [],
     withPrices,
     rows,
     total,

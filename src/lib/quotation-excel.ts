@@ -119,7 +119,7 @@ export async function buildQuotationWorkbookBlob(sheet: QuotationSheet): Promise
           cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: accent } };
           cell.alignment = {
             vertical: "middle",
-            horizontal: columnNumber === 3 || columnNumber === 4 ? "left" : "center",
+            horizontal: columnNumber === 3 ? "left" : "center",
             wrapText: true,
           };
           cell.border = thinBorder(accent);
@@ -148,7 +148,7 @@ export async function buildQuotationWorkbookBlob(sheet: QuotationSheet): Promise
           } else if (typeof cell.value === "number") {
             cell.numFmt = INTEGER;
             cell.alignment = { vertical: "middle", horizontal: "center" };
-          } else if (columnNumber === 3 || columnNumber === 4) {
+          } else if (columnNumber === 3) {
             cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
           } else {
             cell.alignment = { vertical: "middle", horizontal: "center" };
@@ -194,11 +194,9 @@ export async function buildQuotationWorkbookBlob(sheet: QuotationSheet): Promise
   }
 
   if (headerRowNumber) {
-    // Keep the item table usable in Excel: header frozen and filterable, and
-    // repeated at the top of every printed page.
-    worksheet.views = [
-      { state: "frozen", ySplit: headerRowNumber, showGridLines: false },
-    ];
+    // No frozen pane on purpose: freezing the header pins the whole title block
+    // too, which leaves very little scrollable area. The header is still
+    // filterable and is repeated at the top of every printed page.
     if (lastItemRow >= firstItemRow) {
       worksheet.autoFilter = {
         from: { row: headerRowNumber, column: 1 },

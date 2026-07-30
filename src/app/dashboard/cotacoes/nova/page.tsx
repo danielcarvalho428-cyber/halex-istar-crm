@@ -1116,7 +1116,6 @@ function Builder() {
           return [{
             code: product.code,
             description: product.description,
-            presentation: product.presentation,
             brand,
             packSize: Math.max(1, product.packSize || 1),
             quantityMode: line.quantityMode || "boxes",

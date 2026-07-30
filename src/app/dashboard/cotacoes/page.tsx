@@ -60,7 +60,6 @@ export default function QuotationsPage() {
         return {
           code: String(item.code ?? ""),
           description: String(item.description ?? ""),
-          presentation: String(item.presentation ?? ""),
           brand: String(item.brand ?? brand),
           packSize: Math.max(1, catalogPackSize || derived || 1),
           quantityMode: item.quantity_mode === "units" ? ("units" as const) : ("boxes" as const),
