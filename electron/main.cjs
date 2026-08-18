@@ -20,7 +20,8 @@ let _xlsx = null;
 const loadXlsx = () => (_xlsx ??= require("xlsx"));
 const { LocalDatabase } = require("./database.cjs");
 const defaultReferenceData = require("./defaults/reference-data.json");
-const { normalizeHeader, field, numberValue, productRows, agreementPriceRows, salesPriceTableFromSheets, mediconeSalesTableFromSheets } = require("./product-import.cjs");
+const { clientRowsFromSheets } = require("./client-import.cjs");
+const { productRows, agreementPriceRows, salesPriceTableFromSheets, mediconeSalesTableFromSheets } = require("./product-import.cjs");
 const { parseNfePdfIdentity } = require("./nfe-document.cjs");
 
 let mainWindow;
@@ -182,52 +183,18 @@ function spreadsheetSheets(filePath) {
     }),
   }));
 }
-function clientRows(rows) {
-  return rows.map((row) => {
-    const rawClientType = normalizeHeader(
-      field(row, ["tipocliente", "tipo", "categoria"]) || "",
-    );
-    const clientType = rawClientType.includes("distrib")
-      ? "distribuidor"
-      : rawClientType.includes("hospital")
-        ? "hospital"
-        : rawClientType.includes("particular")
-          ? "particular"
-          : null;
-    return {
-    code: String(
-      field(row, ["codigo", "codigocliente", "codcliente", "coderpcliente"]) ||
-        "",
-    ).trim(),
-    name: String(
-      field(row, ["cliente", "nome", "razaosocial", "nomecliente"]) || "",
-    ).trim(),
-    document: String(field(row, ["cnpj", "cpf", "documento"]) || "").trim(),
-    city: String(field(row, ["cidade", "municipio"]) || "").trim(),
-    state: String(field(row, ["uf", "estado"]) || "")
-      .trim()
-      .slice(0, 2)
-      .toUpperCase(),
-    contact: String(field(row, ["contato", "nomecontato"]) || "").trim(),
-    phone: String(
-      field(row, ["telefone", "celular", "whatsapp", "fone"]) || "",
-    ).trim(),
-    email: String(field(row, ["email", "emailcliente"]) || "").trim(),
-    address: String(field(row, ["endereco", "logradouro"]) || "").trim(),
-    last_purchase: dateValue(field(row, ["ultimacompra", "dataultimacompra"])),
-    average_cycle_days: numberValue(
-      field(row, ["ciclomedio", "ciclodias", "mediaciclo"]),
-    ),
-    next_purchase: dateValue(field(row, ["proximacompra", "previsaocompra"])),
-    total_12m:
-      numberValue(field(row, ["total12m", "compras12meses", "valor12m"])) || 0,
-    notes: String(field(row, ["observacoes", "notas"]) || "").trim(),
-    carteira: String(
-      field(row, ["carteira", "grupo", "equipe", "regional", "regiao"]) || "",
-    ).trim(),
-    client_type: clientType,
-  };
-  });
+function spreadsheetObjectSheets(filePath) {
+  const workbook = loadXlsx().readFile(filePath, { cellDates: false });
+  return workbook.SheetNames.map((name) => ({
+    name,
+    rows: loadXlsx().utils.sheet_to_json(workbook.Sheets[name], {
+      defval: "",
+      raw: true,
+    }),
+  }));
+}
+function clientRows(filePath) {
+  return clientRowsFromSheets(spreadsheetObjectSheets(filePath), dateValue);
 }
 
 function nextDirectory() {
@@ -471,7 +438,7 @@ function registerIpc() {
     return {
       fileName: path.basename(filePath),
       ...database.importClients(
-        clientRows(spreadsheetRows(filePath)),
+        clientRows(filePath),
         path.basename(filePath),
       ),
     };

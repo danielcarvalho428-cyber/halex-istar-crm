@@ -45,7 +45,9 @@ function clientFromRow(row: DesktopClient): CrmClient {
           ? "Contato próximo"
           : "Em ciclo",
     clientType:
-      row.client_type === "hospital" || row.client_type === "distribuidor"
+      row.client_type === "hospital" ||
+      row.client_type === "distribuidor" ||
+      row.client_type === "orgao_publico"
         ? row.client_type
         : undefined,
     cnpj: row.cnpj || row.document || undefined,

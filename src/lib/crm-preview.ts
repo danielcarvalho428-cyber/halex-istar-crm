@@ -12,10 +12,25 @@ export type CrmClient = {
   nextPurchase: string;
   total12m: number;
   status: 'Comprar agora' | 'Contato próximo' | 'Em ciclo';
-  clientType?: 'hospital' | 'distribuidor';
+  clientType?: 'hospital' | 'distribuidor' | 'orgao_publico';
   cnpj?: string;
   carteira?: string;
 };
+
+export type CrmClientType = NonNullable<CrmClient['clientType']>;
+
+/** The three sales carteiras (equipes) used across the CRM. */
+export const CARTEIRA_OPTIONS = ['4104', '4413', '4648'] as const;
+
+export const CLIENT_TYPE_OPTIONS: Array<{ value: CrmClientType; label: string }> = [
+  { value: 'hospital', label: 'Hospital / Clínica' },
+  { value: 'distribuidor', label: 'Distribuidor' },
+  { value: 'orgao_publico', label: 'Órgão público' },
+];
+
+export function clientTypeLabel(value?: string) {
+  return CLIENT_TYPE_OPTIONS.find((option) => option.value === value)?.label || '';
+}
 
 export type CrmProduct = {
   id: string;

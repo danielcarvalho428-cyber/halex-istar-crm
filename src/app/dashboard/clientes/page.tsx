@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { FilePlus2, Search, UserRoundCheck, MapPin, UserCircle2, Pencil, Trash2 } from "lucide-react";
-import { appDate, money } from "@/lib/crm-preview";
+import { CARTEIRA_OPTIONS, CLIENT_TYPE_OPTIONS, appDate, clientTypeLabel, money } from "@/lib/crm-preview";
 import { notifyCrmDataChanged, useDesktopClients } from "@/lib/use-desktop-data";
 import { useAppUX } from "@/components/AppUX";
 
@@ -12,16 +12,20 @@ export default function ClientsPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("Todos");
   const [sort, setSort] = useState("prioridade");
+  const [clientType, setClientType] = useState("Todos");
+  const [carteira, setCarteira] = useState("Todas");
   const { confirm, toast } = useAppUX();
   const allClients = useDesktopClients();
   const clients = useMemo(
     () =>
       allClients.filter((client) => (status === "Todos" || client.status === status) &&
+        (clientType === "Todos" || (client.clientType || "hospital") === clientType) &&
+        (carteira === "Todas" || client.carteira === carteira) &&
         `${client.name} ${client.code} ${client.city} ${client.contact}`
           .toLowerCase()
           .includes(query.toLowerCase()),
       ).sort((a, b) => sort === "nome" ? a.name.localeCompare(b.name) : sort === "potencial" ? b.total12m - a.total12m : a.nextPurchase.localeCompare(b.nextPurchase)),
-    [allClients, query, sort, status],
+    [allClients, carteira, clientType, query, sort, status],
   );
   return (
     <div className="space-y-6">
@@ -45,7 +49,7 @@ export default function ClientsPage() {
           placeholder="Buscar cliente, código, cidade ou contato"
         />
       </div>
-      <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-stone-500">{clients.length} de {allClients.length} clientes</span><select aria-label="Filtrar por status" className="form-input ml-auto text-xs" value={status} onChange={(e) => setStatus(e.target.value)}><option>Todos</option><option>Comprar agora</option><option>Contato próximo</option><option>Em ciclo</option></select><select aria-label="Ordenar clientes" className="form-input text-xs" value={sort} onChange={(e) => setSort(e.target.value)}><option value="prioridade">Prioridade</option><option value="nome">Nome</option><option value="potencial">Maior potencial</option></select></div>
+      <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-stone-500">{clients.length} de {allClients.length} clientes</span><select aria-label="Filtrar por status" className="form-input ml-auto text-xs" value={status} onChange={(e) => setStatus(e.target.value)}><option>Todos</option><option>Comprar agora</option><option>Contato próximo</option><option>Em ciclo</option></select><select aria-label="Filtrar por tipo de cliente" className="form-input text-xs" value={clientType} onChange={(e) => setClientType(e.target.value)}><option value="Todos">Todos os tipos</option>{CLIENT_TYPE_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}</select><select aria-label="Filtrar por carteira" className="form-input text-xs" value={carteira} onChange={(e) => setCarteira(e.target.value)}><option value="Todas">Todas as carteiras</option>{CARTEIRA_OPTIONS.map((item) => (<option key={item} value={item}>{item}</option>))}</select><select aria-label="Ordenar clientes" className="form-input text-xs" value={sort} onChange={(e) => setSort(e.target.value)}><option value="prioridade">Prioridade</option><option value="nome">Nome</option><option value="potencial">Maior potencial</option></select></div>
           <Link href="/dashboard/clientes/novo" className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold mb-4">
             <FilePlus2 size={14} />
             Adicionar cliente
@@ -77,9 +81,16 @@ export default function ClientsPage() {
                   </p>
                 </div>
               </div>
-              <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-800">
-                {client.status}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {client.clientType && (
+                  <span className="rounded-full bg-stone-100 px-2 py-1 text-[10px] font-bold text-stone-600">
+                    {clientTypeLabel(client.clientType)}
+                  </span>
+                )}
+                <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-800">
+                  {client.status}
+                </span>
+              </div>
             </div>
             <dl className="mt-5 grid grid-cols-2 gap-4 border-y border-stone-100 py-4 text-xs">
               <div>

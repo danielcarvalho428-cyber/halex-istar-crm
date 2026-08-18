@@ -201,7 +201,14 @@ export default function ImportPage() {
           </p>
           <p className="mt-3 text-xs text-stone-400">
             Colunas principais: código, cliente/razão social, CNPJ, cidade, UF,
-            contato, telefone, e-mail, última compra, ciclo e próxima compra.
+            carteira (4104, 4413 ou 4648), contato, telefone, e-mail, última
+            compra, ciclo e próxima compra. Cada aba da planilha pode ser uma
+            carteira.
+          </p>
+          <p className="mt-2 text-xs text-stone-400">
+            O tipo é classificado pelo nome: secretaria, fundo ou prefeitura
+            entram como órgão público, distribuidoras como distribuidor e o
+            restante como hospital/clínica — ajustável no cadastro do cliente.
           </p>
           <button
             onClick={() => void importClients()}

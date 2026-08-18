@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
-import { CrmClient } from "@/lib/crm-preview";
+import { CARTEIRA_OPTIONS, CLIENT_TYPE_OPTIONS, CrmClient, CrmClientType } from "@/lib/crm-preview";
 
 function ClientForm() {
   const router = useRouter();
@@ -15,7 +15,7 @@ function ClientForm() {
     name: "",
     code: "",
     carteira: "",
-    clientType: "hospital" as "hospital" | "distribuidor",
+    clientType: "hospital" as CrmClientType,
     cnpj: "",
     city: "",
     state: "",
@@ -52,7 +52,9 @@ function ClientForm() {
         name: String(client.name || ""),
         code: String(client.code || ""),
         carteira: String(client.carteira || ""),
-        clientType: client.client_type === "distribuidor" ? "distribuidor" : "hospital",
+        clientType: CLIENT_TYPE_OPTIONS.some((option) => option.value === client.client_type)
+          ? (client.client_type as CrmClientType)
+          : "hospital",
         cnpj: String(client.document || client.cnpj || ""),
         city: String(client.city || ""),
         state: String(client.state || ""),
@@ -219,19 +221,35 @@ function ClientForm() {
                 onChange={handleChange}
                 className="form-input mt-2 w-full"
               >
-                <option value="hospital">Hospital / Clínica</option>
-                <option value="distribuidor">Distribuidor</option>
+                {CLIENT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
+              <span className="mt-2 block font-normal text-stone-500">
+                Secretarias, fundos e prefeituras entram como órgão público na importação — ajuste aqui se houver
+                divergência.
+              </span>
             </label>
             <label className="text-xs font-bold md:col-span-2">
-              Carteira (Região)
-              <input
+              Carteira
+              <select
                 name="carteira"
                 value={form.carteira}
                 onChange={handleChange}
                 className="form-input mt-2 w-full"
-                placeholder="Ex: Sul, Capital, Interior..."
-              />
+              >
+                <option value="">Selecione a carteira</option>
+                {CARTEIRA_OPTIONS.map((carteira) => (
+                  <option key={carteira} value={carteira}>
+                    {carteira}
+                  </option>
+                ))}
+                {form.carteira && !CARTEIRA_OPTIONS.includes(form.carteira as (typeof CARTEIRA_OPTIONS)[number]) && (
+                  <option value={form.carteira}>{form.carteira}</option>
+                )}
+              </select>
             </label>
             <label className="text-xs font-bold">
               Cidade

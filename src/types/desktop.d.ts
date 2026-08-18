@@ -1,4 +1,4 @@
-type ClientType = 'hospital' | 'particular' | 'distribuidor';
+type ClientType = 'hospital' | 'particular' | 'distribuidor' | 'orgao_publico';
 
 /** Extended desktop client shape */
 interface DesktopClient {

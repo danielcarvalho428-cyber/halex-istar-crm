@@ -464,6 +464,9 @@ class LocalDatabase {
     );
   }
 
+  // A re-import never overwrites a client_type already on record: the type is
+  // inferred from the razão social, and the cadastro screen is where the user
+  // corrects a mismatch — that correction must survive the next sync.
   importClients(rows, sourceName) {
     const now = new Date().toISOString();
     let added = 0,
@@ -485,7 +488,7 @@ class LocalDatabase {
         const id = existing?.id || crypto.randomUUID();
         this.db.run(
           `INSERT INTO clients (id,code,name,document,city,state,contact,phone,email,address,status,last_purchase,average_cycle_days,next_purchase,total_12m,notes,client_type,carteira,created_at,updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET name=excluded.name,document=excluded.document,city=excluded.city,state=excluded.state,contact=excluded.contact,phone=excluded.phone,email=excluded.email,address=excluded.address,status='active',last_purchase=excluded.last_purchase,average_cycle_days=excluded.average_cycle_days,next_purchase=excluded.next_purchase,total_12m=excluded.total_12m,notes=excluded.notes,client_type=COALESCE(excluded.client_type,clients.client_type),carteira=COALESCE(NULLIF(excluded.carteira,''),clients.carteira),updated_at=excluded.updated_at`,
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET name=excluded.name,document=excluded.document,city=excluded.city,state=excluded.state,contact=excluded.contact,phone=excluded.phone,email=excluded.email,address=excluded.address,status='active',last_purchase=excluded.last_purchase,average_cycle_days=excluded.average_cycle_days,next_purchase=excluded.next_purchase,total_12m=excluded.total_12m,notes=excluded.notes,client_type=COALESCE(clients.client_type,excluded.client_type),carteira=COALESCE(NULLIF(excluded.carteira,''),clients.carteira),updated_at=excluded.updated_at`,
           [
             id,
             value.code,
