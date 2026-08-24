@@ -304,6 +304,23 @@ function emailHistory() {
   }
 }
 
+const { MAILBOX_PRESETS, scanMailbox } = require("./contact-mailbox.cjs");
+
+/** Caixa de e-mails lida para descobrir o contato dos clientes. */
+function readContactMailbox() {
+  const value = JSON.parse(database.getSetting("contact_mailbox") || "{}");
+  if (!value.email || !value.encryptedPassword) {
+    throw new Error("Configure a caixa de e-mails e a senha de aplicativo antes de buscar contatos.");
+  }
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error("A criptografia segura do sistema não está disponível.");
+  }
+  return {
+    ...value,
+    password: safeStorage.decryptString(Buffer.from(value.encryptedPassword, "base64")),
+  };
+}
+
 /** Cópia obrigatória de todo DANFE enviado pelo aplicativo. */
 const BILLING_EMAIL_ALWAYS_CC = "enirvendas3@gmail.com";
 
@@ -682,6 +699,58 @@ function registerIpc() {
     }
   });
   ipcMain.handle("billing:email:history", () => emailHistory());
+  ipcMain.handle("contacts:mailbox:get", () => {
+    const stored = database.getSetting("contact_mailbox");
+    const value = stored ? JSON.parse(stored) : {};
+    return {
+      provider: value.provider || "yahoo",
+      email: value.email || "",
+      host: value.host || "",
+      port: Number(value.port) || 993,
+      months: Number(value.months) || 24,
+      hasPassword: Boolean(value.encryptedPassword),
+      presets: MAILBOX_PRESETS,
+    };
+  });
+  ipcMain.handle("contacts:mailbox:save", (_event, input) => {
+    const email = String(input?.email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Informe um e-mail válido.");
+    const provider = String(input?.provider || "yahoo");
+    const preset = MAILBOX_PRESETS[provider];
+    const host = String(input?.host || preset?.host || "").trim();
+    if (!host) throw new Error("Informe o servidor IMAP.");
+
+    const current = JSON.parse(database.getSetting("contact_mailbox") || "{}");
+    const password = String(input?.password || "").replace(/\s/g, "");
+    let encryptedPassword = current.encryptedPassword || "";
+    if (password) {
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error("A criptografia segura do sistema não está disponível.");
+      }
+      encryptedPassword = safeStorage.encryptString(password).toString("base64");
+    }
+    if (!encryptedPassword) throw new Error("Informe a senha de aplicativo da caixa.");
+
+    database.setSetting("contact_mailbox", JSON.stringify({
+      provider,
+      email,
+      host,
+      port: Number(input?.port) || preset?.port || 993,
+      months: Math.min(60, Math.max(1, Number(input?.months) || 24)),
+      encryptedPassword,
+    }));
+    return true;
+  });
+  ipcMain.handle("contacts:scan", async () => {
+    const config = readContactMailbox();
+    return scanMailbox({
+      host: config.host,
+      port: config.port,
+      user: config.email,
+      pass: config.password,
+      months: config.months,
+    });
+  });
   ipcMain.handle("billing:email:send", async (_event, input) => {
     const to = String(input?.to || "").trim().toLowerCase();
     // Every DANFE goes with a fixed copy to the comercial mailbox, so the

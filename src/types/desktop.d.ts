@@ -185,6 +185,37 @@ interface HalexDesktopApi {
       status: string;
     }>>;
   };
+  contacts: {
+    getMailbox(): Promise<{
+      provider: string;
+      email: string;
+      host: string;
+      port: number;
+      months: number;
+      hasPassword: boolean;
+      presets: Record<string, { label: string; host: string; port: number }>;
+    }>;
+    saveMailbox(value: {
+      provider: string;
+      email: string;
+      password?: string;
+      host?: string;
+      port?: number;
+      months?: number;
+    }): Promise<boolean>;
+    scan(): Promise<{
+      contacts: Array<{
+        address: string;
+        name: string;
+        subject: string;
+        lastSeenAt: string;
+        messages: number;
+      }>;
+      messages: number;
+      folders: string[];
+      since: string;
+    }>;
+  };
   imports: {
     products(): Promise<{
       fileName: string;

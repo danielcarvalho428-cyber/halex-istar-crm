@@ -47,6 +47,11 @@ contextBridge.exposeInMainWorld("halexDesktop", {
     openDataFolder: () => ipcRenderer.invoke("settings:documents:open"),
     chooseDataFolder: () => ipcRenderer.invoke("settings:documents:choose"),
   },
+  contacts: {
+    getMailbox: () => ipcRenderer.invoke("contacts:mailbox:get"),
+    saveMailbox: (value) => ipcRenderer.invoke("contacts:mailbox:save", value),
+    scan: () => ipcRenderer.invoke("contacts:scan"),
+  },
   billing: {
     parseReportPdf: (data) => ipcRenderer.invoke("billing:report:pdf", data),
     chooseDanfes: () => ipcRenderer.invoke("billing:danfes:choose"),
