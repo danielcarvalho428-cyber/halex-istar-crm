@@ -5,6 +5,7 @@ import {
   buildInvoiceEmail,
   findOrderForInvoice,
   reconcileInvoice,
+  suggestBillingTemplate,
 } from "./billing-order-link.ts";
 import type { HalexInvoice } from "./halex-bulk-empenho.ts";
 import type { Empenho, EmpenhoItem, Licitacao, LicitacaoItem } from "../types/index.ts";
@@ -72,23 +73,49 @@ test("reports 100% billing and lists every item in the email", () => {
   const nota = invoice("12345", [100, 50]);
   const reconciliation = reconcileInvoice(nota, [nota], orders);
   assert.equal(reconciliation.result?.status, "full");
+  assert.equal(suggestBillingTemplate(reconciliation), "integral");
 
   const email = buildInvoiceEmail(nota, reconciliation);
-  assert.match(email.subject, /faturado integralmente/);
+  assert.match(email.subject, /^Nota fiscal 12345 · Pedido 655693461$/);
   assert.match(email.body, /004124 — Produto A: 100 un/);
-  assert.match(email.body, /40000135 — Produto B: 50 de 50 un — atendido integralmente/);
-  assert.match(email.body, /100% dos itens solicitados foram faturados/);
+  assert.match(email.body, /40000135 — Produto B: 50 un/);
+  assert.match(email.body, /O pedido 655693461 foi atendido integralmente\./);
+  // The client is never told about our internal conferência.
+  assert.doesNotMatch(email.body, /base|conferência/i);
 });
 
 test("lists the pending balance when the pedido is only partially billed", () => {
   const nota = invoice("12345", [40, 0]);
   const reconciliation = reconcileInvoice(nota, [nota], orders);
   assert.equal(reconciliation.result?.status, "partial");
+  assert.equal(suggestBillingTemplate(reconciliation), "parcial");
 
   const email = buildInvoiceEmail(nota, reconciliation);
   assert.match(email.subject, /faturado parcialmente/);
-  assert.match(email.body, /004124 — Produto A: 40 de 100 un — saldo pendente de 60 un/);
-  assert.match(email.body, /40000135 — Produto B: 0 de 50 un — ainda não faturado/);
+  assert.match(email.body, /Itens faturados nesta nota fiscal:/);
+  assert.match(email.body, /Itens com saldo pendente:/);
+  assert.match(email.body, /004124 — Produto A: 60 un/);
+  assert.match(email.body, /40000135 — Produto B: 50 un/);
+});
+
+test("announces a pedido that has not been billed at all", () => {
+  const nota = invoice("12345", [0, 0]);
+  const reconciliation = reconcileInvoice(nota, [nota], orders);
+  assert.equal(suggestBillingTemplate(reconciliation), "pendente");
+
+  const email = buildInvoiceEmail(nota, reconciliation, "pendente");
+  assert.match(email.subject, /Pedido 655693461 · itens pendentes/);
+  assert.match(email.body, /ainda não foi faturado/);
+  assert.match(email.body, /004124 — Produto A: 100 un/);
+  assert.doesNotMatch(email.body, /segue anexo/i);
+});
+
+test("lets the user pick a template other than the suggested one", () => {
+  const nota = invoice("12345", [100, 50]);
+  const reconciliation = reconcileInvoice(nota, [nota], orders);
+  const parcial = buildInvoiceEmail(nota, reconciliation, "parcial");
+  assert.match(parcial.subject, /faturado parcialmente/);
+  assert.match(parcial.body, /Os saldos pendentes serão faturados/);
 });
 
 test("sums every nota fiscal of the report that settles the same pedido", () => {
@@ -97,15 +124,15 @@ test("sums every nota fiscal of the report that settles the same pedido", () => 
   const reconciliation = reconcileInvoice(second, [first, second], orders);
   assert.equal(reconciliation.result?.status, "full");
   assert.deepEqual(reconciliation.invoiceNumbers.sort(), ["12345", "12346"]);
-  assert.match(buildInvoiceEmail(second, reconciliation).body, /Notas fiscais emitidas para este pedido/);
 });
 
-test("falls back to a conference request when the pedido is unknown", () => {
+test("keeps the email short when the pedido is unknown", () => {
   const nota = invoice("12345", [100, 50]);
   const reconciliation = reconcileInvoice(nota, [nota], []);
   assert.equal(reconciliation.result, null);
 
   const email = buildInvoiceEmail(nota, reconciliation);
-  assert.match(email.body, /não foi localizado na nossa base/);
+  assert.match(email.body, /Segue anexo o DANFE da nota fiscal 12345/);
   assert.match(email.body, /004124 — Produto A: 100 un/);
+  assert.doesNotMatch(email.body, /não foi localizado/);
 });

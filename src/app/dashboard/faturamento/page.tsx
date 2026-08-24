@@ -25,10 +25,13 @@ import {
   type HalexMatrixRow,
 } from "@/lib/halex-bulk-empenho";
 import {
+  BILLING_EMAIL_TEMPLATES,
   buildClientOrders,
   buildInvoiceEmail,
   fulfillmentBadge,
   reconcileInvoice,
+  suggestBillingTemplate,
+  type BillingEmailTemplate,
   type InvoiceReconciliation,
 } from "@/lib/billing-order-link";
 
@@ -47,9 +50,10 @@ function clientKey(value: string) {
 function defaultDraft(
   invoice: HalexInvoice,
   reconciliation: InvoiceReconciliation,
+  template: BillingEmailTemplate,
   email = "",
 ): Draft {
-  return { to: email, ...buildInvoiceEmail(invoice, reconciliation) };
+  return { to: email, ...buildInvoiceEmail(invoice, reconciliation, template) };
 }
 
 function shortDate(value: string) {
@@ -64,6 +68,7 @@ export default function BillingFollowUpPage() {
   const [documents, setDocuments] = useState<DanfeDocument[]>([]);
   const [appData, setAppData] = useState<AppDataBundle | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [templates, setTemplates] = useState<Record<string, BillingEmailTemplate>>({});
   const [history, setHistory] = useState<EmailHistory[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -141,17 +146,30 @@ export default function BillingFollowUpPage() {
       || { order: null, result: null, invoiceNumbers: [invoiceNumber(record.nf)] };
   }
 
+  function templateFor(record: HalexInvoice): BillingEmailTemplate {
+    return templates[record.key] || suggestBillingTemplate(reconciliationFor(record));
+  }
+
   function draftFor(record: HalexInvoice) {
     const key = record.key;
     const reconciliation = reconciliationFor(record);
     return drafts[key] || defaultDraft(
       record,
       reconciliation,
+      templateFor(record),
       emailByClient.get(invoiceNumber(record.codigoCliente))
         || emailByClient.get(`NAME:${clientKey(record.nomeCliente)}`)
         || reconciliation.order?.clientEmail
         || "",
     );
+  }
+
+  // Picking another modelo rewrites the text, so the edits the user made to the
+  // previous one are dropped on purpose — only the destinatário survives.
+  function applyTemplate(record: HalexInvoice, template: BillingEmailTemplate) {
+    const rewritten = defaultDraft(record, reconciliationFor(record), template, draftFor(record).to);
+    setTemplates((current) => ({ ...current, [record.key]: template }));
+    setDrafts((current) => ({ ...current, [record.key]: rewritten }));
   }
 
   function updateDraft(record: HalexInvoice, patch: Partial<Draft>) {
@@ -348,8 +366,16 @@ export default function BillingFollowUpPage() {
                     </div>
                     <div className="grid gap-2">
                       <input type="email" aria-label={`Destinatário da NF ${nf}`} value={draft.to} onChange={(event) => updateDraft(record, { to: event.target.value })} placeholder="E-mail do cliente" className="form-input w-full text-xs" />
+                      <label className="flex items-center gap-2 text-[11px] font-bold text-stone-500">
+                        Modelo
+                        <select aria-label={`Modelo de e-mail da NF ${nf}`} value={templateFor(record)} onChange={(event) => applyTemplate(record, event.target.value as BillingEmailTemplate)} className="form-input flex-1 text-xs">
+                          {BILLING_EMAIL_TEMPLATES.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
                       <input aria-label={`Assunto da NF ${nf}`} value={draft.subject} onChange={(event) => updateDraft(record, { subject: event.target.value })} className="form-input w-full text-xs font-semibold" />
-                      <textarea aria-label={`Mensagem da NF ${nf}`} rows={14} value={draft.body} onChange={(event) => updateDraft(record, { body: event.target.value })} className="form-input w-full resize-y p-3 text-xs leading-5" />
+                      <textarea aria-label={`Mensagem da NF ${nf}`} rows={12} value={draft.body} onChange={(event) => updateDraft(record, { body: event.target.value })} className="form-input w-full resize-y p-3 text-xs leading-5" />
                     </div>
                     <div className="flex flex-col justify-between gap-3">
                       {(() => {

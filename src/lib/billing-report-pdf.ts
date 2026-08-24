@@ -31,6 +31,18 @@ function parseItems(block: string): HalexInvoiceItem[] {
   });
 }
 
+// "Pedido Cliente" is often the last label on the line and can come out empty,
+// in which case the OCR text runs straight into the next label. Cut the capture
+// at the following label and keep it only when it still looks like a pedido.
+function parseCustomerOrder(block: string) {
+  const raw = block.match(/Pedido\s+Cliente\s*[:.-]?\s*(.*)/i)?.[1] || "";
+  const value = clean(
+    raw.split(/Data\s+Cria[cç][aã]o|Origem\s+de\s+Venda|Tipo\s+de\s+Ordem|Representante|NFe|Cliente/i)[0],
+  );
+  const plausible = /\d/.test(value) && value.length <= 30 && value.split(" ").length <= 3;
+  return plausible ? value : "";
+}
+
 export function parseBillingReportOcr(text: string): HalexInvoice[] {
   const starts = [...text.matchAll(/Ordem de venda\s+(\d+)/gi)];
   return starts.flatMap((start, index): HalexInvoice[] => {
@@ -40,7 +52,7 @@ export function parseBillingReportOcr(text: string): HalexInvoice[] {
     const sapOrder = block.match(/Origem de Venda SAP:\s*0*(\d+)/i)?.[1];
     const invoice = block.match(/NFe:\s*0*(\d+)\s*-\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
     if (!client || !sapOrder || !invoice) return [];
-    const customerOrder = block.match(/Pedido Cliente\s*(.*?)(?=\s+Data Criação|\n)/i)?.[1] || "";
+    const customerOrder = parseCustomerOrder(block);
     const created = block.match(/Data Criação\s*(\d{1,2}\/\d{1,2}\/\d{4})/i)?.[1] || "";
     const items = parseItems(block);
     return [{
@@ -53,7 +65,7 @@ export function parseBillingReportOcr(text: string): HalexInvoice[] {
       codigoCliente: "",
       nomeCliente: clean(client),
       items,
-      pedidoCliente: clean(customerOrder),
+      pedidoCliente: customerOrder,
     } as HalexInvoice];
   });
 }

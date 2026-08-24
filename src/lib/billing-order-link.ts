@@ -146,91 +146,99 @@ function quantity(value: number) {
   return new Intl.NumberFormat("pt-BR").format(value);
 }
 
-export function buildInvoiceEmail(invoice: HalexInvoice, reconciliation: InvoiceReconciliation) {
+export const BILLING_EMAIL_TEMPLATES = [
+  { value: "integral", label: "Faturado integralmente" },
+  { value: "parcial", label: "Faturado parcialmente" },
+  { value: "pendente", label: "Ainda não faturado" },
+] as const;
+
+export type BillingEmailTemplate = (typeof BILLING_EMAIL_TEMPLATES)[number]["value"];
+
+/** The template the conferência points to; the user can always pick another. */
+export function suggestBillingTemplate(reconciliation: InvoiceReconciliation): BillingEmailTemplate {
+  const status = reconciliation.result?.status;
+  if (status === "pending") return "pendente";
+  if (status === "partial" || status === "review") return "parcial";
+  return "integral";
+}
+
+function itemLines(invoice: HalexInvoice) {
+  return invoice.items.map(
+    (item) => `• ${item.codigoProduto} — ${item.descricao}: ${quantity(item.quantidade)} un`,
+  );
+}
+
+function pendingLines(reconciliation: InvoiceReconciliation) {
+  return (reconciliation.result?.items || [])
+    .filter((item) => item.missingQuantity > 0)
+    .map((item) => `• ${item.productCode} — ${item.description}: ${quantity(item.missingQuantity)} un`);
+}
+
+export function buildInvoiceEmail(
+  invoice: HalexInvoice,
+  reconciliation: InvoiceReconciliation,
+  template: BillingEmailTemplate = suggestBillingTemplate(reconciliation),
+) {
   const nf = cleanNumber(invoice.nf);
   const client = invoice.nomeCliente || reconciliation.order?.clientName || "";
   const greeting = client ? `Prezados, equipe ${client},` : "Prezados,";
   const issuedAt = formatDate(invoice.dataFaturamento);
   const orderNumber = reconciliation.order?.orderNumber
     || invoice.pedidoCliente
-    || invoice.numeroEmpenho.replace(/^(OV|NF)\s*/i, "");
-  const references = [
-    orderNumber ? `pedido ${orderNumber}` : "",
-    invoice.ordemVenda ? `ordem de venda SAP ${cleanNumber(invoice.ordemVenda)}` : "",
-  ].filter(Boolean);
+    || cleanNumber(invoice.ordemVenda);
+  const orderReference = orderNumber ? `, referente ao pedido ${orderNumber}` : "";
+  const signature = ["", "Atenciosamente,", "Equipe Comercial · Halex Istar"];
+  const pending = pendingLines(reconciliation);
 
-  const opening = `Informamos o faturamento da nota fiscal ${nf}${issuedAt ? `, emitida em ${issuedAt}` : ""}${
-    references.length ? `, referente ao ${references.join(" · ")}` : ""
-  }. O DANFE correspondente segue anexo a este e-mail.`;
-
-  const lines = [
-    greeting,
-    "",
-    opening,
-    "",
-    "Itens faturados nesta nota fiscal:",
-    ...invoice.items.map(
-      (item) => `• ${item.codigoProduto} — ${item.descricao}: ${quantity(item.quantidade)} un`,
-    ),
-  ];
-  let subject = `Nota fiscal ${nf}${orderNumber ? ` · Pedido ${orderNumber}` : ""}${client ? ` · ${client}` : ""}`;
-
-  const result = reconciliation.result;
-  if (!result) {
-    lines.push(
-      "",
-      "O pedido correspondente não foi localizado na nossa base para conferência automática. Pedimos a gentileza de confrontar os itens acima com o pedido emitido.",
-    );
-  } else {
-    const pending = result.items.filter((item) => item.missingQuantity > 0);
-    const otherInvoices = reconciliation.invoiceNumbers.filter((number) => number !== nf);
-
-    lines.push(
-      "",
-      `Conferência com o pedido ${result.order.orderNumber}:`,
-      ...result.items.map((item) => {
-        const label = `• ${item.productCode} — ${item.description}: ${quantity(item.invoicedQuantity)} de ${quantity(item.orderedQuantity)} un`;
-        if (item.status === "full") return `${label} — atendido integralmente`;
-        if (item.status === "partial") return `${label} — saldo pendente de ${quantity(item.missingQuantity)} un`;
-        return `${label} — ainda não faturado`;
-      }),
-    );
-    if (otherInvoices.length) {
-      lines.push("", `Notas fiscais emitidas para este pedido: ${[nf, ...otherInvoices].join(", ")}.`);
-    }
-
-    if (result.status === "full") {
-      subject = `Pedido ${result.order.orderNumber} faturado integralmente · NF ${nf}`;
-      lines.push("", "O pedido foi atendido integralmente: 100% dos itens solicitados foram faturados.");
-    } else if (pending.length) {
-      subject = `Pedido ${result.order.orderNumber} faturado parcialmente · NF ${nf}`;
-      lines.push(
+  if (template === "pendente") {
+    return {
+      subject: orderNumber ? `Pedido ${orderNumber} · itens pendentes de faturamento` : "Itens pendentes de faturamento",
+      body: [
+        greeting,
         "",
-        "Itens ainda pendentes de faturamento:",
-        ...pending.map(
-          (item) => `• ${item.productCode} — ${item.description}: ${quantity(item.missingQuantity)} un`,
-        ),
+        orderNumber
+          ? `Informamos que o pedido ${orderNumber} ainda não foi faturado.`
+          : "Informamos que o pedido ainda não foi faturado.",
+        ...(pending.length ? ["", "Itens pendentes:", ...pending] : []),
         "",
-        "Os saldos pendentes serão faturados assim que houver disponibilidade, e a previsão de entrega será informada em seguida.",
-      );
-    }
-
-    if (result.issues.length) {
-      lines.push("", "Pontos para conferência:", ...result.issues.map((issue) => `• ${issue}`));
-    }
+        "Assim que o faturamento for concluído, enviaremos a nota fiscal e a previsão de entrega.",
+        ...signature,
+      ].join("\n"),
+    };
   }
 
-  lines.push(
-    "",
-    "Solicitamos a gentileza de confirmar o recebimento e de nos informar qualquer divergência identificada.",
-    "",
-    "Permanecemos à disposição para os esclarecimentos necessários.",
-    "",
-    "Atenciosamente,",
-    "Equipe Comercial · Halex Istar",
-  );
+  if (template === "parcial") {
+    return {
+      subject: `Nota fiscal ${nf}${orderNumber ? ` · Pedido ${orderNumber} faturado parcialmente` : ""}`,
+      body: [
+        greeting,
+        "",
+        `Segue anexo o DANFE da nota fiscal ${nf}${issuedAt ? `, emitida em ${issuedAt}` : ""}${orderReference}.`,
+        "",
+        "Itens faturados nesta nota fiscal:",
+        ...itemLines(invoice),
+        ...(pending.length ? ["", "Itens com saldo pendente:", ...pending] : []),
+        "",
+        "Os saldos pendentes serão faturados assim que houver disponibilidade.",
+        ...signature,
+      ].join("\n"),
+    };
+  }
 
-  return { subject, body: lines.join("\n") };
+  return {
+    subject: `Nota fiscal ${nf}${orderNumber ? ` · Pedido ${orderNumber}` : ""}`,
+    body: [
+      greeting,
+      "",
+      `Segue anexo o DANFE da nota fiscal ${nf}${issuedAt ? `, emitida em ${issuedAt}` : ""}${orderReference}.`,
+      "",
+      "Itens faturados:",
+      ...itemLines(invoice),
+      "",
+      orderNumber ? `O pedido ${orderNumber} foi atendido integralmente.` : "O pedido foi atendido integralmente.",
+      ...signature,
+    ].join("\n"),
+  };
 }
 
 export function fulfillmentBadge(reconciliation: InvoiceReconciliation) {
