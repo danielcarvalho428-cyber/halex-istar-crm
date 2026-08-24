@@ -39,6 +39,9 @@ type DanfeDocument = Awaited<ReturnType<NonNullable<typeof window.halexDesktop>[
 type EmailHistory = Awaited<ReturnType<NonNullable<typeof window.halexDesktop>["billing"]["emailHistory"]>>[number];
 type Draft = { to: string; subject: string; body: string };
 
+/** Mirrors the fixed copy the desktop app adds to every DANFE e-mail. */
+const BILLING_EMAIL_ALWAYS_CC = "enirvendas3@gmail.com";
+
 function invoiceNumber(value: string) {
   return normalizeHalexDocument(value).replace(/^0+(?=\d)/, "");
 }
@@ -366,6 +369,7 @@ export default function BillingFollowUpPage() {
                     </div>
                     <div className="grid gap-2">
                       <input type="email" aria-label={`Destinatário da NF ${nf}`} value={draft.to} onChange={(event) => updateDraft(record, { to: event.target.value })} placeholder="E-mail do cliente" className="form-input w-full text-xs" />
+                      <p className="text-[11px] text-stone-500">Cópia sempre para {BILLING_EMAIL_ALWAYS_CC}</p>
                       <label className="flex items-center gap-2 text-[11px] font-bold text-stone-500">
                         Modelo
                         <select aria-label={`Modelo de e-mail da NF ${nf}`} value={templateFor(record)} onChange={(event) => applyTemplate(record, event.target.value as BillingEmailTemplate)} className="form-input flex-1 text-xs">
@@ -420,7 +424,7 @@ export default function BillingFollowUpPage() {
 
       <section className="glass-card overflow-hidden">
         <div className="flex items-center gap-2 border-b border-stone-200 p-4"><History size={16} className="text-amber-700" /><h2 className="font-semibold">Histórico de envios</h2></div>
-        {history.length === 0 ? <p className="p-5 text-sm text-stone-500">Nenhum DANFE enviado por este aplicativo.</p> : <div className="divide-y divide-stone-100">{history.slice(0, 30).map((item) => <div key={item.id} className="grid gap-2 p-4 text-xs sm:grid-cols-[150px_1fr_auto]"><span className="text-stone-500">{new Date(item.sentAt).toLocaleString("pt-BR")}</span><span><Mail className="mr-1 inline" size={13} />{item.to} · {item.subject}</span><strong className="text-emerald-700">NF {item.invoiceNumbers.join(", ")}</strong></div>)}</div>}
+        {history.length === 0 ? <p className="p-5 text-sm text-stone-500">Nenhum DANFE enviado por este aplicativo.</p> : <div className="divide-y divide-stone-100">{history.slice(0, 30).map((item) => <div key={item.id} className="grid gap-2 p-4 text-xs sm:grid-cols-[150px_1fr_auto]"><span className="text-stone-500">{new Date(item.sentAt).toLocaleString("pt-BR")}</span><span><Mail className="mr-1 inline" size={13} />{item.to}{item.cc ? ` (cc ${item.cc})` : ""} · {item.subject}</span><strong className="text-emerald-700">NF {item.invoiceNumbers.join(", ")}</strong></div>)}</div>}
       </section>
     </div>
   );

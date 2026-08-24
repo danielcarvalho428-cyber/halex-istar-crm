@@ -304,6 +304,9 @@ function emailHistory() {
   }
 }
 
+/** Cópia obrigatória de todo DANFE enviado pelo aplicativo. */
+const BILLING_EMAIL_ALWAYS_CC = "enirvendas3@gmail.com";
+
 function registerIpc() {
   ipcMain.handle("db:clients:list", () => database.listClients());
   ipcMain.handle("db:clients:get", (_event, id) => database.getClient(id));
@@ -681,6 +684,9 @@ function registerIpc() {
   ipcMain.handle("billing:email:history", () => emailHistory());
   ipcMain.handle("billing:email:send", async (_event, input) => {
     const to = String(input?.to || "").trim().toLowerCase();
+    // Every DANFE goes with a fixed copy to the comercial mailbox, so the
+    // envio stays on record even when the vendedor forgets to add it.
+    const cc = to === BILLING_EMAIL_ALWAYS_CC ? "" : BILLING_EMAIL_ALWAYS_CC;
     const subject = String(input?.subject || "").trim();
     const body = String(input?.body || "").trim();
     const tokens = Array.isArray(input?.attachmentTokens)
@@ -709,6 +715,7 @@ function registerIpc() {
       const info = await transport.sendMail({
         from: { name: config.senderName || config.signatureName || config.email, address: config.email },
         to,
+        ...(cc ? { cc } : {}),
         subject,
         text: `${body}\n\n${[config.signatureName, config.signatureRole, config.phone].filter(Boolean).join("\n")}`,
         html: `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.55;color:#1f2937">${html(body).replace(/\n/g, "<br>")}<br><br>${signature}${logos ? `<div>${logos}</div>` : ""}</div>`,
@@ -721,6 +728,7 @@ function registerIpc() {
         id: crypto.randomUUID(),
         sentAt: new Date().toISOString(),
         to,
+        cc,
         subject,
         invoiceNumbers: Array.isArray(input?.invoiceNumbers) ? input.invoiceNumbers.map(String).slice(0, 20) : [],
         attachments: files.map((file) => file.fileName),

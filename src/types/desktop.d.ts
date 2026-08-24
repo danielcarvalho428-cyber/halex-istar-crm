@@ -165,6 +165,8 @@ interface HalexDesktopApi {
       id: string;
       sentAt: string;
       to: string;
+      /** Fixed comercial copy; empty when it would duplicate the destinatário. */
+      cc?: string;
       subject: string;
       invoiceNumbers: string[];
       attachments: string[];
@@ -175,6 +177,8 @@ interface HalexDesktopApi {
       id: string;
       sentAt: string;
       to: string;
+      /** Absent on e-mails sent before the fixed comercial copy existed. */
+      cc?: string;
       subject: string;
       invoiceNumbers: string[];
       attachments: string[];
