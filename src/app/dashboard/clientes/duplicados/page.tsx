@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, CopyCheck, ShieldCheck, Trash2 } from "lucide-react";
 import { appDate, money, type CrmClient } from "@/lib/crm-preview";
 import {
+  clientCodeRank,
   clientIdentityLabel,
   findDuplicateClientGroups,
   formatCnpj,
@@ -86,7 +87,7 @@ export default function DuplicateClientsPage() {
         <p className="lumina-kicker">CRM</p>
         <h1 className="mt-2">Clientes duplicados</h1>
         <p className="mt-2 text-sm text-stone-500">
-          Cadastros que repetem o mesmo CNPJ ficam em quarentena, fora da carteira ativa, até você decidir qual manter.
+          Cadastros que repetem o mesmo CNPJ ficam em quarentena, fora da carteira ativa. Mantemos o de código com 6 dígitos e marcamos os de código mais longo para exclusão.
         </p>
       </header>
 
@@ -137,6 +138,11 @@ export default function DuplicateClientsPage() {
                 <IdentityBadges client={group.keeper} />
                 <p className="mt-2 text-xs text-stone-600">
                   {group.keeper.city}/{group.keeper.state} · última compra {appDate(group.keeper.lastPurchase)} · {money(group.keeper.total12m)} em 12 meses
+                </p>
+                <p className="mt-1 text-[11px] text-emerald-800">
+                  {clientCodeRank(group.keeper.code) === 0
+                    ? "Mantido por ter o código de 6 dígitos do cadastro oficial."
+                    : "Nenhum cadastro deste CNPJ tem código de 6 dígitos; mantido o de código mais curto."}
                 </p>
               </div>
 

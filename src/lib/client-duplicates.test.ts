@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  clientCodeRank,
   clientIdentityLabel,
   findDuplicateClientGroups,
   formatCnpj,
@@ -44,6 +45,32 @@ test("groups cadastros that repeat a CNPJ written differently", () => {
   assert.equal(groups[0].document, "12345678000190");
   assert.equal(groups[0].keeper.id, "a");
   assert.deepEqual(groups[0].duplicates.map((item) => item.id), ["b"]);
+});
+
+test("keeps the six-digit código even when the longer one has the history", () => {
+  const [group] = findDuplicateClientGroups([
+    client({ id: "long", code: "3001234567", cnpj: "12345678000190", total12m: 90000, lastPurchase: "2026-07-02" }),
+    client({ id: "canonical", code: "300123", cnpj: "12345678000190", total12m: 0 }),
+  ]);
+  assert.equal(group.keeper.id, "canonical");
+  assert.deepEqual(group.duplicates.map((item) => item.id), ["long"]);
+});
+
+test("ranks códigos by shape: six digits, shorter, longer, missing", () => {
+  assert.equal(clientCodeRank("300123"), 0);
+  assert.equal(clientCodeRank("3001"), 1);
+  assert.equal(clientCodeRank("3001234567"), 2);
+  assert.equal(clientCodeRank(""), 3);
+  // Punctuation never changes the shape of a código.
+  assert.equal(clientCodeRank("300-123"), 0);
+});
+
+test("prefers the shortest código when none has six digits", () => {
+  const [group] = findDuplicateClientGroups([
+    client({ id: "longest", code: "300123456789", cnpj: "12345678000190", total12m: 90000 }),
+    client({ id: "shorter", code: "30012345", cnpj: "12345678000190" }),
+  ]);
+  assert.equal(group.keeper.id, "shorter");
 });
 
 test("keeps the cadastro with the strongest purchase history", () => {

@@ -24,13 +24,33 @@ export function hasUsableCnpj(client: CrmClient) {
   return normalizeCnpj(client.cnpj).length === 14;
 }
 
+/** The código Halex uses for a real cadastro has exactly six digits. */
+export const CANONICAL_CLIENT_CODE_DIGITS = 6;
+
 /**
- * Keeps the cadastro with the strongest history: more purchases in 12 months,
- * then the most recent purchase, then the lowest código — so the choice is
- * stable across reloads and re-imports.
+ * Ranks the código shape: the six-digit cadastro is the real one, and the
+ * longer códigos that come along in an import are the duplicates to delete.
+ */
+export function clientCodeRank(code?: string | null) {
+  const digits = String(code ?? "").replace(/\D/g, "");
+  if (!digits) return 3;
+  if (digits.length === CANONICAL_CLIENT_CODE_DIGITS) return 0;
+  if (digits.length < CANONICAL_CLIENT_CODE_DIGITS) return 1;
+  return 2;
+}
+
+/**
+ * Keeps the cadastro with the canonical six-digit código first — that is the
+ * one the operação actually works with. Only when the códigos have the same
+ * shape does the purchase history break the tie, and the código itself keeps
+ * the choice stable across reloads and re-imports.
  */
 function keeperFirst(a: CrmClient, b: CrmClient) {
-  return (b.total12m || 0) - (a.total12m || 0)
+  const digitsA = String(a.code ?? "").replace(/\D/g, "");
+  const digitsB = String(b.code ?? "").replace(/\D/g, "");
+  return clientCodeRank(a.code) - clientCodeRank(b.code)
+    || digitsA.length - digitsB.length
+    || (b.total12m || 0) - (a.total12m || 0)
     || (b.lastPurchase || "").localeCompare(a.lastPurchase || "")
     || (a.code || "").localeCompare(b.code || "")
     || a.id.localeCompare(b.id);
