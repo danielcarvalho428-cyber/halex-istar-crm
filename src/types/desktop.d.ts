@@ -192,6 +192,7 @@ interface HalexDesktopApi {
       host: string;
       port: number;
       months: number;
+      internalDomains: string[];
       hasPassword: boolean;
       presets: Record<string, { label: string; host: string; port: number }>;
     }>;
@@ -202,6 +203,8 @@ interface HalexDesktopApi {
       host?: string;
       port?: number;
       months?: number;
+      /** Comma or space separated list of domains never treated as clients. */
+      internalDomains?: string;
     }): Promise<boolean>;
     scan(): Promise<{
       contacts: Array<{

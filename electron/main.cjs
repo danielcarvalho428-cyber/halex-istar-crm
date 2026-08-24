@@ -708,6 +708,7 @@ function registerIpc() {
       host: value.host || "",
       port: Number(value.port) || 993,
       months: Number(value.months) || 24,
+      internalDomains: Array.isArray(value.internalDomains) ? value.internalDomains : [],
       hasPassword: Boolean(value.encryptedPassword),
       presets: MAILBOX_PRESETS,
     };
@@ -737,6 +738,11 @@ function registerIpc() {
       host,
       port: Number(input?.port) || preset?.port || 993,
       months: Math.min(60, Math.max(1, Number(input?.months) || 24)),
+      internalDomains: String(input?.internalDomains || "")
+        .split(/[\s,;]+/)
+        .map((domain) => domain.trim().toLowerCase().replace(/^@/, ""))
+        .filter(Boolean)
+        .slice(0, 30),
       encryptedPassword,
     }));
     return true;

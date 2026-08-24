@@ -69,37 +69,44 @@ function domainIdentity(address: string) {
 }
 
 /**
- * Scores one contact against one client. The distinctive tokens of the razão
- * social are what count — a shared "HOSPITAL" proves nothing.
+ * Scores one contact against one client. Identity has to come from the address
+ * itself — the display name or a corporate domain. The subject only says who
+ * the message talks *about*: a representante writing about a hospital is not
+ * the hospital's contact, which is exactly how wrong addresses got proposed.
  */
 export function scoreContact(client: CrmClient, contact: MailboxContact) {
   const clientTokens = nameTokens(client.name);
   if (clientTokens.length === 0) return { score: 0, evidence: "" };
 
-  const haystack = new Set([
-    ...nameTokens(contact.name),
-    ...nameTokens(contact.subject),
-  ]);
-  const matchedName = clientTokens.filter((token) => haystack.has(token));
+  const fromName = new Set(nameTokens(contact.name));
+  const fromSubject = new Set(nameTokens(contact.subject));
+  const matchedName = clientTokens.filter((token) => fromName.has(token));
+  const matchedSubject = clientTokens.filter((token) => fromSubject.has(token));
   // The domain glues the words together, so match tokens inside it and only
   // trust it when it covers most of the razão social.
   const domain = domainIdentity(contact.address);
   const inDomain = domain ? clientTokens.filter((token) => domain.includes(token)) : [];
   const matchedDomain = inDomain.length * 2 >= clientTokens.length ? inDomain : [];
 
-  const nameRatio = matchedName.length / clientTokens.length;
   const evidence: string[] = [];
   let score = 0;
 
   if (matchedName.length > 0) {
     // Every distinctive token matching is a strong signal; a single one out of
     // many is weak, so the ratio drives most of the score.
+    const nameRatio = matchedName.length / clientTokens.length;
     score += Math.round(nameRatio * 70) + matchedName.length * 5;
     evidence.push(`nome: ${matchedName.join(", ")}`);
   }
   if (matchedDomain.length > 0) {
-    score += 30;
+    score += 40;
     evidence.push(`domínio: ${emailDomain(contact.address)}`);
+  }
+  // The subject only reinforces an identity the address already carries; on its
+  // own it stays below MIN_CONTACT_SCORE and is never proposed.
+  if (matchedSubject.length > 0) {
+    score += score > 0 ? 10 : Math.min(20, matchedSubject.length * 8);
+    evidence.push(`assunto: ${matchedSubject.join(", ")}`);
   }
   // Repeated correspondence with the same address adds a little confidence.
   if (score > 0 && contact.messages > 1) score += Math.min(10, contact.messages);
@@ -117,26 +124,89 @@ function confidenceOf(score: number): ContactSuggestion["confidence"] {
 export const MIN_CONTACT_SCORE = 30;
 
 /**
+ * Domains that are never a client contact: our own people and the parceiros who
+ * write about many clients. The mailbox's own domain is added at call time.
+ */
+export const DEFAULT_INTERNAL_DOMAINS = ["medicone.com.br", "halexistar.com.br", "halex.com.br"];
+
+/**
+ * An address that fits three or more different clients belongs to someone who
+ * talks about clients — a representante, a colega — not to a client.
+ */
+export const MAX_CLIENTS_PER_ADDRESS = 2;
+
+export type MatchOptions = {
+  /** Extra domains to ignore, beyond DEFAULT_INTERNAL_DOMAINS. */
+  internalDomains?: string[];
+};
+
+export type MatchResult = {
+  suggestions: ContactSuggestion[];
+  /** Addresses held back, with the reason, so the screen can explain itself. */
+  discarded: Array<{ address: string; reason: string; clients: number }>;
+};
+
+function isInternal(address: string, internalDomains: Set<string>) {
+  const domain = emailDomain(address);
+  return domain !== "" && internalDomains.has(domain);
+}
+
+/**
  * Proposes one address per client that still has no e-mail. Nothing here writes
  * to the cadastro — the screen always asks for confirmation first.
  */
 export function matchContactsToClients(
   clients: CrmClient[],
   contacts: MailboxContact[],
+  options: MatchOptions = {},
 ): ContactSuggestion[] {
-  const pending = clients.filter((client) => !client.email?.trim());
+  return matchContacts(clients, contacts, options).suggestions;
+}
 
-  return pending
+export function matchContacts(
+  clients: CrmClient[],
+  contacts: MailboxContact[],
+  options: MatchOptions = {},
+): MatchResult {
+  const internalDomains = new Set(
+    [...DEFAULT_INTERNAL_DOMAINS, ...(options.internalDomains || [])]
+      .map((domain) => domain.trim().toLowerCase().replace(/^@/, ""))
+      .filter(Boolean),
+  );
+  const usable = contacts.filter((contact) => !isInternal(contact.address, internalDomains));
+  const discarded: MatchResult["discarded"] = contacts
+    .filter((contact) => isInternal(contact.address, internalDomains))
+    .map((contact) => ({ address: contact.address, reason: "domínio interno", clients: 0 }));
+
+  const pending = clients.filter((client) => !client.email?.trim());
+  const best = pending
     .map((client) => {
-      let best: ContactSuggestion | null = null;
-      for (const contact of contacts) {
+      let winner: ContactSuggestion | null = null;
+      for (const contact of usable) {
         const { score, evidence } = scoreContact(client, contact);
         if (score < MIN_CONTACT_SCORE) continue;
-        if (best && score <= best.score) continue;
-        best = { client, contact, score, confidence: confidenceOf(score), evidence };
+        if (winner && score <= winner.score) continue;
+        winner = { client, contact, score, confidence: confidenceOf(score), evidence };
       }
-      return best;
+      return winner;
     })
-    .filter((suggestion): suggestion is ContactSuggestion => suggestion !== null)
+    .filter((suggestion): suggestion is ContactSuggestion => suggestion !== null);
+
+  // One address proposed for many clients is a person who writes about them.
+  const clientsPerAddress = new Map<string, number>();
+  for (const suggestion of best) {
+    const address = suggestion.contact.address;
+    clientsPerAddress.set(address, (clientsPerAddress.get(address) || 0) + 1);
+  }
+  for (const [address, count] of clientsPerAddress) {
+    if (count > MAX_CLIENTS_PER_ADDRESS) {
+      discarded.push({ address, reason: "aparece em vários clientes", clients: count });
+    }
+  }
+
+  const suggestions = best
+    .filter((suggestion) => (clientsPerAddress.get(suggestion.contact.address) || 0) <= MAX_CLIENTS_PER_ADDRESS)
     .sort((a, b) => b.score - a.score || a.client.name.localeCompare(b.client.name));
+
+  return { suggestions, discarded };
 }

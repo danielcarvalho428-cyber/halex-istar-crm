@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, LoaderCircle, Mail, MailSearch, Save, ShieldCheck } from "lucide-react";
 import {
-  matchContactsToClients,
+  DEFAULT_INTERNAL_DOMAINS,
+  matchContacts,
   type ContactSuggestion,
   type MailboxContact,
 } from "@/lib/client-contact-match";
@@ -35,9 +36,12 @@ export default function ClientEmailsPage() {
     window.halexDesktop?.contacts.getMailbox().then(setMailbox).catch(() => {});
   }, []);
 
-  const suggestions = useMemo(
-    () => matchContactsToClients(clients, contacts),
-    [clients, contacts],
+  const { suggestions, discarded } = useMemo(
+    () => matchContacts(clients, contacts, {
+      // The mailbox's own domain is ours by definition.
+      internalDomains: [...(mailbox?.internalDomains || []), mailbox?.email.split("@")[1] || ""],
+    }),
+    [clients, contacts, mailbox],
   );
   const missingCount = clients.filter((client) => !client.email?.trim()).length;
   // Only high confidence starts checked; média and baixa need a human look.
@@ -58,6 +62,7 @@ export default function ClientEmailsPage() {
         provider: mailbox.provider,
         email: mailbox.email,
         password: password || undefined,
+        internalDomains: (mailbox.internalDomains || []).join(", "),
         host: mailbox.host || mailbox.presets[mailbox.provider]?.host,
         port: mailbox.port,
         months: mailbox.months,
@@ -164,6 +169,10 @@ export default function ClientEmailsPage() {
                 Senha de aplicativo
                 <input type="password" className="form-input mt-1 w-full text-sm" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={mailbox.hasPassword ? "•••••••• (salva)" : "senha de aplicativo"} />
               </label>
+              <label className="text-xs font-bold text-stone-500 md:col-span-2">
+                Domínios internos (nunca viram contato de cliente)
+                <input className="form-input mt-1 w-full text-sm" value={(mailbox.internalDomains || []).join(", ")} onChange={(event) => updateMailbox({ internalDomains: event.target.value.split(/[\s,;]+/).filter(Boolean) })} placeholder={DEFAULT_INTERNAL_DOMAINS.join(", ")} />
+              </label>
               <label className="text-xs font-bold text-stone-500">
                 Período (meses)
                 <input type="number" min={1} max={60} className="form-input mt-1 w-full text-sm" value={mailbox.months} onChange={(event) => updateMailbox({ months: Number(event.target.value) })} />
@@ -200,6 +209,12 @@ export default function ClientEmailsPage() {
             </button>
           </div>
 
+          {discarded.length > 0 && (
+            <p className="border-b border-stone-100 bg-stone-50 p-3 text-[11px] text-stone-600">
+              {discarded.length} endereço(s) descartado(s): {discarded.slice(0, 6).map((item) => `${item.address} (${item.reason}${item.clients ? `, ${item.clients} clientes` : ""})`).join(" · ")}
+              {discarded.length > 6 ? " …" : ""}
+            </p>
+          )}
           {suggestions.length === 0 ? (
             <p className="p-5 text-sm text-stone-500">Nenhum endereço da caixa pôde ser associado com segurança a um cliente sem e-mail.</p>
           ) : (

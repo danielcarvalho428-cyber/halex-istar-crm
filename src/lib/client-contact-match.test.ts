@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  matchContacts,
   matchContactsToClients,
   nameTokens,
   scoreContact,
@@ -64,13 +65,48 @@ test("a shared generic word alone never proposes an address", () => {
   assert.deepEqual(suggestions, []);
 });
 
-test("reads the client name from the subject when the display name is empty", () => {
+test("the subject alone never proposes an address", () => {
+  // A representante writing "Pedido — Oncologico Palmas" is talking about the
+  // client, not writing from it: her address must not become their contact.
+  const suggestions = matchContactsToClients(
+    [client({ id: "a", name: "CENTRO ONCOLOGICO DE PALMAS" })],
+    [contact({ address: "vendedora@parceira.com.br", subject: "Pedido — Oncologico Palmas" })],
+  );
+  assert.deepEqual(suggestions, []);
+});
+
+test("the subject still reinforces an address that already carries the name", () => {
   const [suggestion] = matchContactsToClients(
     [client({ id: "a", name: "CENTRO ONCOLOGICO DE PALMAS" })],
-    [contact({ address: "financeiro@gmail.com", subject: "Pedido — Oncologico Palmas" })],
+    [contact({ address: "compras@oncologicopalmas.com.br", name: "Oncologico Palmas", subject: "Pedido — Oncologico Palmas" })],
   );
-  assert.equal(suggestion.contact.address, "financeiro@gmail.com");
-  assert.match(suggestion.evidence, /nome: ONCOLOGICO, PALMAS/);
+  assert.equal(suggestion.confidence, "alta");
+  assert.match(suggestion.evidence, /assunto: ONCOLOGICO, PALMAS/);
+});
+
+test("ignores addresses from our own and partner domains", () => {
+  const result = matchContacts(
+    [client({ id: "a", name: "HOSPITAL ORTOPEDICO CERES" })],
+    [contact({ address: "vendedora@medicone.com.br", name: "Ana — Ortopedico Ceres" })],
+  );
+  assert.deepEqual(result.suggestions, []);
+  assert.deepEqual(result.discarded.map((item) => item.reason), ["domínio interno"]);
+});
+
+test("drops an address that fits many clients at once", () => {
+  const shared = contact({ address: "ana@parceiracomercial.com.br", name: "Ana Ceres Palmas Vida" });
+  const result = matchContacts(
+    [
+      client({ id: "a", name: "HOSPITAL ORTOPEDICO CERES" }),
+      client({ id: "b", name: "CENTRO ONCOLOGICO DE PALMAS" }),
+      client({ id: "c", name: "CLINICA VIDA PLENA" }),
+    ],
+    [shared],
+  );
+  assert.deepEqual(result.suggestions, []);
+  const reason = result.discarded.find((item) => item.address === shared.address);
+  assert.equal(reason?.reason, "aparece em vários clientes");
+  assert.equal(reason?.clients, 3);
 });
 
 test("a corporate domain reinforces the match, a personal one does not", () => {
