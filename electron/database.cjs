@@ -419,6 +419,33 @@ class LocalDatabase {
     this.persist();
     return true;
   }
+  // Batch cleanup for duplicated cadastros: a client that already carries
+  // quotations is never removed silently — it comes back as blocked so the
+  // screen can tell the user which cadastro to keep.
+  deleteClients(ids) {
+    const deleted = [];
+    const blocked = [];
+    for (const id of Array.isArray(ids) ? ids : []) {
+      const client = this.getClient(id);
+      if (!client) continue;
+      try {
+        const quotationCount = Number(
+          this.rows("SELECT COUNT(*) AS total FROM quotations WHERE client_id = ?", [id])[0]?.total || 0,
+        );
+        if (quotationCount > 0) throw new Error("Possui cotações salvas.");
+        this.db.run("DELETE FROM clients WHERE id = ?", [id]);
+        deleted.push(id);
+      } catch (error) {
+        blocked.push({
+          id,
+          name: client.name || "",
+          reason: error instanceof Error ? error.message : "Não foi possível excluir.",
+        });
+      }
+    }
+    this.persist();
+    return { deleted, blocked };
+  }
   listProducts() {
     return this.rows(
       "SELECT * FROM products WHERE active = 1 ORDER BY description",

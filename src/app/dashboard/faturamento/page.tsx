@@ -24,6 +24,13 @@ import {
   type HalexInvoice,
   type HalexMatrixRow,
 } from "@/lib/halex-bulk-empenho";
+import {
+  buildClientOrders,
+  buildInvoiceEmail,
+  fulfillmentBadge,
+  reconcileInvoice,
+  type InvoiceReconciliation,
+} from "@/lib/billing-order-link";
 
 type DanfeDocument = Awaited<ReturnType<NonNullable<typeof window.halexDesktop>["billing"]["chooseDanfes"]>>[number];
 type EmailHistory = Awaited<ReturnType<NonNullable<typeof window.halexDesktop>["billing"]["emailHistory"]>>[number];
@@ -37,22 +44,12 @@ function clientKey(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/gi, "").toUpperCase();
 }
 
-function defaultDraft(invoice: HalexInvoice, email = ""): Draft {
-  const nf = invoiceNumber(invoice.nf);
-  const salesOrder = invoice.numeroEmpenho.replace(/^OV\s*/i, "");
-  const order = salesOrder ? ` referente à ordem de venda ${salesOrder}` : "";
-  return {
-    to: email,
-    subject: `Nota fiscal ${nf} · ${invoice.nomeCliente || "Halex Istar"}`,
-    body: [
-      invoice.nomeCliente ? `Olá, equipe ${invoice.nomeCliente},` : "Olá,",
-      "",
-      `Informamos que a nota fiscal ${nf}${order} foi faturada.`,
-      "O DANFE correspondente segue anexo para conferência.",
-      "",
-      "Permanecemos à disposição.",
-    ].join("\n"),
-  };
+function defaultDraft(
+  invoice: HalexInvoice,
+  reconciliation: InvoiceReconciliation,
+  email = "",
+): Draft {
+  return { to: email, ...buildInvoiceEmail(invoice, reconciliation) };
 }
 
 function shortDate(value: string) {
@@ -92,6 +89,26 @@ export default function BillingFollowUpPage() {
     return map;
   }, [appData]);
 
+  const clientOrders = useMemo(
+    () => buildClientOrders(
+      appData?.licitacoes || [],
+      appData?.itens || [],
+      appData?.empenhos || [],
+      appData?.empenhoItens || [],
+    ),
+    [appData],
+  );
+
+  // Reconciling a NF needs every other NF of the report, because a pedido can be
+  // billed across several notas fiscais before it reaches 100%.
+  const reconciliationByInvoice = useMemo(() => {
+    const map = new Map<string, InvoiceReconciliation>();
+    for (const record of records) {
+      map.set(record.key, reconcileInvoice(record, records, clientOrders));
+    }
+    return map;
+  }, [records, clientOrders]);
+
   const documentByInvoice = useMemo(() => {
     const map = new Map<string, DanfeDocument>();
     for (const document of documents) {
@@ -113,12 +130,26 @@ export default function BillingFollowUpPage() {
 
   const matchedCount = records.filter((record) => documentByInvoice.has(invoiceNumber(record.nf))).length;
 
+  const fullyBilledCount = new Set(
+    [...reconciliationByInvoice.values()]
+      .filter((item) => item.result?.status === "full" && item.order)
+      .map((item) => item.order!.empenhoId),
+  ).size;
+
+  function reconciliationFor(record: HalexInvoice): InvoiceReconciliation {
+    return reconciliationByInvoice.get(record.key)
+      || { order: null, result: null, invoiceNumbers: [invoiceNumber(record.nf)] };
+  }
+
   function draftFor(record: HalexInvoice) {
     const key = record.key;
+    const reconciliation = reconciliationFor(record);
     return drafts[key] || defaultDraft(
       record,
+      reconciliation,
       emailByClient.get(invoiceNumber(record.codigoCliente))
         || emailByClient.get(`NAME:${clientKey(record.nomeCliente)}`)
+        || reconciliation.order?.clientEmail
         || "",
     );
   }
@@ -269,7 +300,7 @@ export default function BillingFollowUpPage() {
       {records.length > 0 && (
         <>
           <section className="metric-strip grid grid-cols-2 md:grid-cols-4">
-            {[["NFs no relatório", records.length], ["DANFEs lidos", documents.length], ["Prontos para envio", matchedCount], ["Enviados nesta base", history.length]].map(([label, value]) => (
+            {[["NFs no relatório", records.length], ["DANFEs lidos", documents.length], ["Prontos para envio", matchedCount], ["Pedidos 100% faturados", fullyBilledCount]].map(([label, value]) => (
               <div key={String(label)} className="metric-item p-4"><p className="text-[10px] font-bold uppercase text-stone-500">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p></div>
             ))}
           </section>
@@ -318,10 +349,36 @@ export default function BillingFollowUpPage() {
                     <div className="grid gap-2">
                       <input type="email" aria-label={`Destinatário da NF ${nf}`} value={draft.to} onChange={(event) => updateDraft(record, { to: event.target.value })} placeholder="E-mail do cliente" className="form-input w-full text-xs" />
                       <input aria-label={`Assunto da NF ${nf}`} value={draft.subject} onChange={(event) => updateDraft(record, { subject: event.target.value })} className="form-input w-full text-xs font-semibold" />
-                      <textarea aria-label={`Mensagem da NF ${nf}`} rows={4} value={draft.body} onChange={(event) => updateDraft(record, { body: event.target.value })} className="form-input w-full resize-y p-3 text-xs leading-5" />
+                      <textarea aria-label={`Mensagem da NF ${nf}`} rows={14} value={draft.body} onChange={(event) => updateDraft(record, { body: event.target.value })} className="form-input w-full resize-y p-3 text-xs leading-5" />
                     </div>
                     <div className="flex flex-col justify-between gap-3">
-                      <div className="rounded-lg bg-stone-50 p-3 text-[11px] text-stone-600"><strong>{record.items.length} item(ns)</strong><p className="mt-1">O texto é editável para indicar faturamento parcial quando necessário.</p></div>
+                      {(() => {
+                        const reconciliation = reconciliationFor(record);
+                        const badge = fulfillmentBadge(reconciliation);
+                        const tone = badge.tone === "success"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                          : badge.tone === "warning"
+                            ? "border-amber-200 bg-amber-50 text-amber-800"
+                            : "border-stone-200 bg-stone-50 text-stone-600";
+                        const items = reconciliation.result?.items || [];
+                        return (
+                          <div className={`rounded-lg border p-3 text-[11px] ${tone}`}>
+                            <strong>{badge.label}</strong>
+                            <p className="mt-1">{record.items.length} item(ns) nesta NF{reconciliation.order ? ` · pedido ${reconciliation.order.orderNumber}` : ""}</p>
+                            {items.length > 0 && (
+                              <ul className="mt-2 space-y-0.5">
+                                {items.map((item) => (
+                                  <li key={`${record.key}-${item.productCode}-${item.description}`}>
+                                    {item.productCode}: {item.invoicedQuantity}/{item.orderedQuantity}
+                                    {item.missingQuantity > 0 ? ` (faltam ${item.missingQuantity})` : " ✓"}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {!reconciliation.result && <p className="mt-2">Cadastre o empenho do cliente para conferir o faturamento automaticamente.</p>}
+                          </div>
+                        );
+                      })()}
                       <button type="button" disabled={!document?.token || !draft.to || sending === record.key} onClick={() => void sendEmail(record)} className="brand-button inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40">
                         {sending === record.key ? <LoaderCircle className="animate-spin" size={14} /> : <Send size={14} />}{sending === record.key ? "Enviando..." : sent ? "Enviar novamente" : "Enviar e-mail"}
                       </button>

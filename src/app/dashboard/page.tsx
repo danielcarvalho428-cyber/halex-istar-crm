@@ -5,6 +5,7 @@ import { ArrowRight, Building2, CalendarClock, FilePlus2, ReceiptText, TrendingU
 import { appDate, money } from '@/lib/crm-preview';
 import { useDesktopClients, useDesktopQuotations } from '@/lib/use-desktop-data';
 import { localIsoDate } from '@/lib/date';
+import { clientIdentityLabel } from '@/lib/client-duplicates';
 
 export default function DashboardPage() {
   const clients = useDesktopClients();
@@ -52,7 +53,7 @@ export default function DashboardPage() {
         <div className="divide-y divide-stone-100">
           {priorities.map((client) => (
             <article key={client.id} className="grid gap-4 p-5 md:grid-cols-[1fr_auto_auto] md:items-center">
-              <div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{client.name}</h3><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${client.status === 'Comprar agora' ? 'bg-red-50 text-red-700' : client.status === 'Contato próximo' ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}>{client.status}</span></div><p className="mt-1 text-xs text-stone-500">{client.city}/{client.state} · {client.contact} · Última compra {appDate(client.lastPurchase)}</p></div>
+              <div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{client.name}</h3><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${client.status === 'Comprar agora' ? 'bg-red-50 text-red-700' : client.status === 'Contato próximo' ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}>{client.status}</span></div><p className="mt-1 text-[11px] font-bold text-stone-600">{clientIdentityLabel(client).code} · {clientIdentityLabel(client).cnpj}</p><p className="mt-1 text-xs text-stone-500">{client.city}/{client.state} · {client.contact} · Última compra {appDate(client.lastPurchase)}</p></div>
               <div className="text-left md:text-right"><p className="text-[10px] font-bold uppercase text-stone-400">Próxima compra</p><p className="mt-1 text-sm font-bold">{appDate(client.nextPurchase)}</p></div>
               <Link href={`/dashboard/cotacoes/nova?cliente=${client.id}`} className="brand-button inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold"><FilePlus2 size={14} /> Cotar</Link>
             </article>

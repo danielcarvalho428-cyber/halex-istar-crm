@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CalendarClock, FilePlus2, Phone } from "lucide-react";
 import { appDate } from "@/lib/crm-preview";
 import { useDesktopClients } from "@/lib/use-desktop-data";
+import { clientIdentityLabel } from "@/lib/client-duplicates";
 
 export default function AgendaPage() {
   const clients = [...useDesktopClients()].sort((left, right) =>
@@ -38,6 +39,9 @@ export default function AgendaPage() {
               </div>
               <div>
                 <h3 className="font-semibold">{client.name}</h3>
+                <p className="mt-1 text-[11px] font-bold text-stone-600">
+                  {clientIdentityLabel(client).code} · {clientIdentityLabel(client).cnpj}
+                </p>
                 <p className="mt-1 text-xs text-stone-500">
                   {client.contact || "Contato não informado"} · ciclo de{" "}
                   {client.averageCycleDays || 0} dias · {client.phone || "sem telefone"}

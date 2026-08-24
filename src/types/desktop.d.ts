@@ -73,6 +73,10 @@ interface HalexDesktopApi {
     list(): Promise<DesktopClient[]>;
     get(id: string): Promise<DesktopClient | null>;
     delete(id: string): Promise<boolean>;
+    deleteMany(ids: string[]): Promise<{
+      deleted: string[];
+      blocked: Array<{ id: string; name: string; reason: string }>;
+    }>;
     save(value: Partial<DesktopClient> & { name: string }): Promise<string>;
   };
   products: {

@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("halexDesktop", {
     list: () => ipcRenderer.invoke("db:clients:list"),
     get: (id) => ipcRenderer.invoke("db:clients:get", id),
     delete: (id) => ipcRenderer.invoke("db:clients:delete", id),
+    deleteMany: (ids) => ipcRenderer.invoke("db:clients:deleteMany", ids),
     save: (value) => ipcRenderer.invoke("db:clients:save", value),
   },
   products: {

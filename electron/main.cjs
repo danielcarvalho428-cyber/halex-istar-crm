@@ -312,6 +312,11 @@ function registerIpc() {
     exportClientsSpreadsheet();
     return result;
   });
+  ipcMain.handle("db:clients:deleteMany", (_event, ids) => {
+    const result = database.deleteClients(ids);
+    exportClientsSpreadsheet();
+    return result;
+  });
   ipcMain.handle("db:clients:save", (_event, value) => {
     const result = database.saveClient(value);
     exportClientsSpreadsheet();

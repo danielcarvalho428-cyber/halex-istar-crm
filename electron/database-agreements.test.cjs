@@ -389,6 +389,31 @@ test("updates and deletes clients while protecting quotation history", async () 
   });
 });
 
+test("deletes duplicated clients in batch and blocks the ones with quotations", async () => {
+  await withDatabase((database) => {
+    database.saveClient({ id: "dup-keep", code: "DUP1", name: "Hospital Matriz", document: "12345678000190" });
+    database.saveClient({ id: "dup-plain", code: "DUP2", name: "Hospital Matriz Repetido", document: "12.345.678/0001-90" });
+    database.saveClient({ id: "dup-quoted", code: "DUP3", name: "Hospital Matriz Cotado", document: "12345678000190" });
+    database.saveQuotation({
+      id: "dup-quote",
+      quote_number: "HI-DUP",
+      client_id: "dup-quoted",
+      issued_at: "2026-07-02",
+      valid_until: "2026-07-17",
+      items: [],
+    });
+
+    const result = database.deleteClients(["dup-plain", "dup-quoted", "missing-id"]);
+    assert.deepEqual(result.deleted, ["dup-plain"]);
+    assert.equal(result.blocked.length, 1);
+    assert.equal(result.blocked[0].id, "dup-quoted");
+    assert.match(result.blocked[0].reason, /cotações salvas/);
+    assert.equal(database.getClient("dup-plain"), null);
+    assert.ok(database.getClient("dup-quoted"));
+    assert.ok(database.getClient("dup-keep"));
+  });
+});
+
 test("client imports preserve group and client type assignments", async () => {
   await withDatabase((database) => {
     database.importClients([{
