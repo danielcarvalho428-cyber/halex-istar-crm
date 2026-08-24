@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld("halexDesktop", {
     getMailbox: () => ipcRenderer.invoke("contacts:mailbox:get"),
     saveMailbox: (value) => ipcRenderer.invoke("contacts:mailbox:save", value),
     scan: () => ipcRenderer.invoke("contacts:scan"),
+    lookupCnpjs: (cnpjs) => ipcRenderer.invoke("contacts:cnpj:lookup", cnpjs),
   },
   billing: {
     parseReportPdf: (data) => ipcRenderer.invoke("billing:report:pdf", data),

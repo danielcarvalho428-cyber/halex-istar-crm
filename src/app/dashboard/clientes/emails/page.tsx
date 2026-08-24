@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, LoaderCircle, Mail, MailSearch, Save, Search, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Building2, FileCheck2, LoaderCircle, Mail, MailSearch, Save, Search, ShieldCheck } from "lucide-react";
 import {
   DEFAULT_INTERNAL_DOMAINS,
   matchContacts,
@@ -10,6 +10,12 @@ import {
   type MailboxContact,
 } from "@/lib/client-contact-match";
 import { clientIdentityLabel } from "@/lib/client-duplicates";
+import {
+  contactsFromLicitacoes,
+  federalUpdates,
+  type FederalRecord,
+} from "@/lib/client-contact-sources";
+import { db } from "@/lib/db";
 import { notifyCrmDataChanged, useDesktopClients } from "@/lib/use-desktop-data";
 import { useAppUX } from "@/components/AppUX";
 
@@ -33,11 +39,15 @@ export default function ClientEmailsPage() {
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [manualFor, setManualFor] = useState("");
   const [manualQuery, setManualQuery] = useState("");
+  const [licitacoes, setLicitacoes] = useState<Awaited<ReturnType<typeof db.getAppData>>["licitacoes"]>([]);
+  const [federal, setFederal] = useState<FederalRecord[]>([]);
+  const [federalNote, setFederalNote] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
 
   useEffect(() => {
     window.halexDesktop?.contacts.getMailbox().then(setMailbox).catch(() => {});
+    db.getAppData().then((data) => setLicitacoes(data.licitacoes)).catch(() => {});
   }, []);
 
   const { suggestions, discarded } = useMemo(
@@ -141,6 +151,84 @@ export default function ClientEmailsPage() {
     }
   }
 
+  const licitacaoContacts = useMemo(
+    () => contactsFromLicitacoes(clients, licitacoes),
+    [clients, licitacoes],
+  );
+  const federalPending = useMemo(() => federalUpdates(clients, federal), [clients, federal]);
+
+  async function applyLicitacaoContacts() {
+    if (!window.halexDesktop || licitacaoContacts.length === 0) return;
+    setBusy("licitacoes");
+    setError("");
+    let saved = 0;
+    try {
+      for (const item of licitacaoContacts) {
+        const stored = await window.halexDesktop.clients.get(item.client.id);
+        if (!stored) continue;
+        await window.halexDesktop.clients.save({
+          ...stored,
+          email: item.email,
+          // The telefone only fills a gap; it never replaces what is on record.
+          phone: String(stored.phone || "").trim() || item.phone,
+          contact: String(stored.contact || "").trim() || item.contact,
+        });
+        saved += 1;
+      }
+      notifyCrmDataChanged();
+      toast(`${saved} e-mail(s) copiado(s) das licitações.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível copiar os contatos.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function lookupFederal() {
+    if (!window.halexDesktop) return;
+    setBusy("federal");
+    setError("");
+    setFederalNote("");
+    try {
+      const cnpjs = clients.map((client) => client.cnpj || "").filter(Boolean);
+      const result = await window.halexDesktop.contacts.lookupCnpjs(cnpjs);
+      setFederal(result.records);
+      setFederalNote(
+        `${result.records.length} CNPJ(s) na Receita · ${result.consulted} consultado(s) agora`
+        + `${result.skipped ? ` · ${result.skipped} além do limite desta rodada` : ""}`
+        + `${result.failed ? ` · ${result.failed} sem resposta` : ""}`
+        + `${result.invalid ? ` · ${result.invalid} CNPJ(s) inválido(s) no cadastro` : ""}`,
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível consultar a Receita.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function applyFederalPhones() {
+    if (!window.halexDesktop) return;
+    const withPhone = federalPending.filter((item) => item.phone);
+    if (withPhone.length === 0) return;
+    setBusy("federal-apply");
+    setError("");
+    let saved = 0;
+    try {
+      for (const item of withPhone) {
+        const stored = await window.halexDesktop.clients.get(item.client.id);
+        if (!stored) continue;
+        await window.halexDesktop.clients.save({ ...stored, phone: item.phone });
+        saved += 1;
+      }
+      notifyCrmDataChanged();
+      toast(`${saved} telefone(s) preenchido(s) pela Receita.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível gravar os telefones.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function assignAddress(clientId: string, address: string) {
     if (!window.halexDesktop) return;
     setBusy("apply");
@@ -181,6 +269,34 @@ export default function ClientEmailsPage() {
       </div>
 
       {error && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
+
+      {licitacaoContacts.length > 0 && (
+        <section className="glass-card p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold"><FileCheck2 size={17} className="text-emerald-700" /> Contatos já cadastrados nas licitações</h2>
+              <p className="mt-1 text-xs text-stone-500">
+                {licitacaoContacts.length} cliente(s) sem e-mail têm o contato do órgão em uma licitação. É a fonte mais confiável para órgão público.
+              </p>
+            </div>
+            <button type="button" disabled={busy !== ""} onClick={() => void applyLicitacaoContacts()} className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold disabled:opacity-40">
+              {busy === "licitacoes" ? <LoaderCircle className="animate-spin" size={14} /> : <ShieldCheck size={14} />}
+              Copiar {licitacaoContacts.length} contato(s)
+            </button>
+          </div>
+          <ul className="mt-4 max-h-64 divide-y divide-stone-100 overflow-y-auto rounded-lg border border-stone-200">
+            {licitacaoContacts.map((item) => (
+              <li key={item.client.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-xs">
+                <span className="min-w-0">
+                  <strong>{item.client.name}</strong>
+                  <span className="mt-0.5 block text-stone-500">{clientIdentityLabel(item.client).code} · {item.source}</span>
+                </span>
+                <span className="font-semibold text-amber-800">{item.email}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="glass-card p-5">
         <h2 className="flex items-center gap-2 font-semibold"><Mail size={17} className="text-amber-700" /> 1. Caixa de e-mails</h2>
@@ -362,6 +478,50 @@ export default function ClientEmailsPage() {
           )}
         </section>
       )}
+
+      <section className="glass-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 font-semibold"><Building2 size={17} className="text-amber-700" /> Consulta pública pelo CNPJ</h2>
+            <p className="mt-1 max-w-2xl text-xs text-stone-500">
+              Consulta a base aberta da Receita Federal. O e-mail não consta mais nesses dados públicos, então esta consulta preenche o <strong>telefone</strong>, aponta divergência de razão social e cidade, e avisa quando o CNPJ não está mais ativo.
+            </p>
+          </div>
+          <button type="button" disabled={busy !== ""} onClick={() => void lookupFederal()} className="brand-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-bold disabled:opacity-40">
+            {busy === "federal" ? <LoaderCircle className="animate-spin" size={14} /> : <Building2 size={14} />}
+            {busy === "federal" ? "Consultando..." : "Consultar Receita"}
+          </button>
+        </div>
+        {federalNote && <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">{federalNote}</p>}
+
+        {federalPending.length > 0 && (
+          <>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-stone-500">
+                {federalPending.filter((item) => item.phone).length} telefone(s) a preencher · {federalPending.filter((item) => item.inactive).length} CNPJ(s) não ativo(s)
+              </span>
+              <button type="button" disabled={busy !== "" || federalPending.every((item) => !item.phone)} onClick={() => void applyFederalPhones()} className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold disabled:opacity-40">
+                {busy === "federal-apply" ? <LoaderCircle className="animate-spin" size={14} /> : <ShieldCheck size={14} />}
+                Preencher telefones
+              </button>
+            </div>
+            <ul className="mt-3 max-h-80 divide-y divide-stone-100 overflow-y-auto rounded-lg border border-stone-200">
+              {federalPending.map((item) => (
+                <li key={item.client.id} className={`p-3 text-xs ${item.inactive ? "bg-amber-50" : ""}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <strong>{item.client.name}</strong>
+                    {item.phone && <span className="font-semibold text-amber-800">{item.phone}</span>}
+                  </div>
+                  <p className="mt-1 text-stone-500">
+                    {clientIdentityLabel(item.client).cnpj}
+                    {item.notes.length > 0 ? ` · ${item.notes.join(" · ")}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
 
     </div>
   );

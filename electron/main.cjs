@@ -305,6 +305,7 @@ function emailHistory() {
 }
 
 const { MAILBOX_PRESETS, scanMailbox } = require("./contact-mailbox.cjs");
+const { lookupCnpjs } = require("./cnpj-lookup.cjs");
 
 /** Caixa de e-mails lida para descobrir o contato dos clientes. */
 function readContactMailbox() {
@@ -746,6 +747,26 @@ function registerIpc() {
       encryptedPassword,
     }));
     return true;
+  });
+  ipcMain.handle("contacts:cnpj:lookup", async (_event, cnpjs) => {
+    const list = Array.isArray(cnpjs) ? cnpjs.map(String).slice(0, 2000) : [];
+    let cache = {};
+    try {
+      cache = JSON.parse(database.getSetting("cnpj_lookup_cache") || "{}");
+    } catch {
+      cache = {};
+    }
+    const result = await lookupCnpjs(list, { cache });
+    // The cache spares the public service on the next run; keep it bounded.
+    const entries = Object.entries(result.cache).slice(-5000);
+    database.setSetting("cnpj_lookup_cache", JSON.stringify(Object.fromEntries(entries)));
+    return {
+      records: result.records,
+      consulted: result.consulted,
+      skipped: result.skipped,
+      invalid: result.invalid.length,
+      failed: result.failed.length,
+    };
   });
   ipcMain.handle("contacts:scan", async () => {
     const config = readContactMailbox();

@@ -218,6 +218,20 @@ interface HalexDesktopApi {
       folders: string[];
       since: string;
     }>;
+    lookupCnpjs(cnpjs: string[]): Promise<{
+      records: Array<{
+        cnpj: string;
+        razaoSocial: string;
+        phone: string;
+        city: string;
+        state: string;
+        situacao: string;
+      }>;
+      consulted: number;
+      skipped: number;
+      invalid: number;
+      failed: number;
+    }>;
   };
   imports: {
     products(): Promise<{
