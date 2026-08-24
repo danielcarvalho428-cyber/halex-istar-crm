@@ -304,21 +304,37 @@ function emailHistory() {
   }
 }
 
-const { MAILBOX_PRESETS, scanMailbox } = require("./contact-mailbox.cjs");
+const { MAILBOX_PRESETS, mergeContacts, scanMailbox } = require("./contact-mailbox.cjs");
 const { lookupCnpjs } = require("./cnpj-lookup.cjs");
 
-/** Caixa de e-mails lida para descobrir o contato dos clientes. */
-function readContactMailbox() {
-  const value = JSON.parse(database.getSetting("contact_mailbox") || "{}");
-  if (!value.email || !value.encryptedPassword) {
-    throw new Error("Configure a caixa de e-mails e a senha de aplicativo antes de buscar contatos.");
+/**
+ * Caixas de e-mail lidas para descobrir o contato dos clientes. Versions
+ * through 0.2.59 stored a single caixa; that one is migrated into the list.
+ */
+function readMailboxConfig() {
+  let value = {};
+  try {
+    value = JSON.parse(database.getSetting("contact_mailbox") || "{}");
+  } catch {
+    value = {};
   }
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("A criptografia segura do sistema não está disponível.");
-  }
+  const mailboxes = Array.isArray(value.mailboxes)
+    ? value.mailboxes
+    : value.email
+      ? [{
+        id: "legacy",
+        provider: value.provider || "yahoo",
+        email: value.email,
+        host: value.host || MAILBOX_PRESETS[value.provider || "yahoo"]?.host || "",
+        port: Number(value.port) || 993,
+        encryptedPassword: value.encryptedPassword || "",
+      }]
+      : [];
+
   return {
-    ...value,
-    password: safeStorage.decryptString(Buffer.from(value.encryptedPassword, "base64")),
+    mailboxes: mailboxes.filter((box) => box.email && box.encryptedPassword),
+    months: Number(value.months) || 24,
+    internalDomains: Array.isArray(value.internalDomains) ? value.internalDomains : [],
   };
 }
 
@@ -701,50 +717,63 @@ function registerIpc() {
   });
   ipcMain.handle("billing:email:history", () => emailHistory());
   ipcMain.handle("contacts:mailbox:get", () => {
-    const stored = database.getSetting("contact_mailbox");
-    const value = stored ? JSON.parse(stored) : {};
+    const config = readMailboxConfig();
     return {
-      provider: value.provider || "yahoo",
-      email: value.email || "",
-      host: value.host || "",
-      port: Number(value.port) || 993,
-      months: Number(value.months) || 24,
-      internalDomains: Array.isArray(value.internalDomains) ? value.internalDomains : [],
-      hasPassword: Boolean(value.encryptedPassword),
+      mailboxes: config.mailboxes.map((box) => ({
+        id: box.id,
+        provider: box.provider,
+        email: box.email,
+        host: box.host,
+        port: box.port,
+        hasPassword: Boolean(box.encryptedPassword),
+      })),
+      months: config.months,
+      internalDomains: config.internalDomains,
       presets: MAILBOX_PRESETS,
     };
   });
   ipcMain.handle("contacts:mailbox:save", (_event, input) => {
-    const email = String(input?.email || "").trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Informe um e-mail válido.");
-    const provider = String(input?.provider || "yahoo");
-    const preset = MAILBOX_PRESETS[provider];
-    const host = String(input?.host || preset?.host || "").trim();
-    if (!host) throw new Error("Informe o servidor IMAP.");
+    const current = readMailboxConfig();
+    const byId = new Map(current.mailboxes.map((box) => [box.id, box]));
+    const incoming = Array.isArray(input?.mailboxes) ? input.mailboxes.slice(0, 10) : [];
 
-    const current = JSON.parse(database.getSetting("contact_mailbox") || "{}");
-    const password = String(input?.password || "").replace(/\s/g, "");
-    let encryptedPassword = current.encryptedPassword || "";
-    if (password) {
-      if (!safeStorage.isEncryptionAvailable()) {
-        throw new Error("A criptografia segura do sistema não está disponível.");
+    const mailboxes = incoming.map((box) => {
+      const email = String(box?.email || "").trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error(`E-mail inválido: ${email || "(vazio)"}`);
+      const provider = String(box?.provider || "yahoo");
+      const preset = MAILBOX_PRESETS[provider];
+      const host = String(box?.host || preset?.host || "").trim();
+      if (!host) throw new Error(`Informe o servidor IMAP de ${email}.`);
+
+      const stored = byId.get(String(box?.id || ""));
+      const password = String(box?.password || "").replace(/\s/g, "");
+      let encryptedPassword = stored?.encryptedPassword || "";
+      if (password) {
+        if (!safeStorage.isEncryptionAvailable()) {
+          throw new Error("A criptografia segura do sistema não está disponível.");
+        }
+        encryptedPassword = safeStorage.encryptString(password).toString("base64");
       }
-      encryptedPassword = safeStorage.encryptString(password).toString("base64");
-    }
-    if (!encryptedPassword) throw new Error("Informe a senha de aplicativo da caixa.");
+      if (!encryptedPassword) throw new Error(`Informe a senha de aplicativo de ${email}.`);
+
+      return {
+        id: String(box?.id || "") || crypto.randomUUID(),
+        provider,
+        email,
+        host,
+        port: Number(box?.port) || preset?.port || 993,
+        encryptedPassword,
+      };
+    });
 
     database.setSetting("contact_mailbox", JSON.stringify({
-      provider,
-      email,
-      host,
-      port: Number(input?.port) || preset?.port || 993,
+      mailboxes,
       months: Math.min(60, Math.max(1, Number(input?.months) || 24)),
       internalDomains: String(input?.internalDomains || "")
         .split(/[\s,;]+/)
         .map((domain) => domain.trim().toLowerCase().replace(/^@/, ""))
         .filter(Boolean)
         .slice(0, 30),
-      encryptedPassword,
     }));
     return true;
   });
@@ -769,14 +798,50 @@ function registerIpc() {
     };
   });
   ipcMain.handle("contacts:scan", async () => {
-    const config = readContactMailbox();
-    return scanMailbox({
-      host: config.host,
-      port: config.port,
-      user: config.email,
-      pass: config.password,
-      months: config.months,
-    });
+    const config = readMailboxConfig();
+    if (config.mailboxes.length === 0) {
+      throw new Error("Configure ao menos uma caixa de e-mails antes de buscar contatos.");
+    }
+
+    const lists = [];
+    const scanned = [];
+    const failures = [];
+    let messages = 0;
+    let since = "";
+
+    // One caixa failing (senha trocada, IMAP desligado) must not lose the
+    // contacts already harvested from the others.
+    for (const box of config.mailboxes) {
+      try {
+        const password = safeStorage.decryptString(Buffer.from(box.encryptedPassword, "base64"));
+        const result = await scanMailbox({
+          host: box.host,
+          port: box.port,
+          user: box.email,
+          pass: password,
+          months: config.months,
+        });
+        lists.push(result.contacts);
+        messages += result.messages;
+        since = since || result.since;
+        scanned.push({ email: box.email, contacts: result.contacts.length, messages: result.messages, folders: result.folders });
+      } catch (error) {
+        failures.push({ email: box.email, reason: error instanceof Error ? error.message : "falha na leitura" });
+      }
+    }
+
+    if (lists.length === 0) {
+      throw new Error(`Nenhuma caixa pôde ser lida. ${failures.map((item) => `${item.email}: ${item.reason}`).join(" · ")}`);
+    }
+
+    return {
+      contacts: mergeContacts(lists),
+      messages,
+      folders: [...new Set(scanned.flatMap((item) => item.folders))],
+      since,
+      mailboxes: scanned,
+      failures,
+    };
   });
   ipcMain.handle("billing:email:send", async (_event, input) => {
     const to = String(input?.to || "").trim().toLowerCase();

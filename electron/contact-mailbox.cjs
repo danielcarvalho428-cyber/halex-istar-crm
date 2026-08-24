@@ -107,4 +107,33 @@ async function scanMailbox({ host, port, user, pass, folders, months = 24, maxMe
   };
 }
 
-module.exports = { MAILBOX_PRESETS, aggregateContacts, scanMailbox };
+/**
+ * Folds the result of several caixas into one list. The same address seen in
+ * two caixas is one contact, with the messages added up and the newest name
+ * and subject kept.
+ */
+function mergeContacts(lists) {
+  const byAddress = new Map();
+
+  for (const contact of lists.flat()) {
+    const current = byAddress.get(contact.address);
+    if (!current) {
+      byAddress.set(contact.address, { ...contact });
+      continue;
+    }
+    const isNewer = contact.lastSeenAt > current.lastSeenAt;
+    byAddress.set(contact.address, {
+      address: contact.address,
+      name: (isNewer && contact.name) || current.name || contact.name,
+      subject: isNewer ? contact.subject || current.subject : current.subject,
+      lastSeenAt: isNewer ? contact.lastSeenAt : current.lastSeenAt,
+      messages: current.messages + contact.messages,
+    });
+  }
+
+  return [...byAddress.values()].sort(
+    (a, b) => b.messages - a.messages || a.address.localeCompare(b.address),
+  );
+}
+
+module.exports = { MAILBOX_PRESETS, aggregateContacts, mergeContacts, scanMailbox };

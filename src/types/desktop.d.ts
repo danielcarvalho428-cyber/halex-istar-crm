@@ -187,21 +187,27 @@ interface HalexDesktopApi {
   };
   contacts: {
     getMailbox(): Promise<{
-      provider: string;
-      email: string;
-      host: string;
-      port: number;
+      mailboxes: Array<{
+        id: string;
+        provider: string;
+        email: string;
+        host: string;
+        port: number;
+        hasPassword: boolean;
+      }>;
       months: number;
       internalDomains: string[];
-      hasPassword: boolean;
       presets: Record<string, { label: string; host: string; port: number }>;
     }>;
     saveMailbox(value: {
-      provider: string;
-      email: string;
-      password?: string;
-      host?: string;
-      port?: number;
+      mailboxes: Array<{
+        id?: string;
+        provider: string;
+        email: string;
+        password?: string;
+        host?: string;
+        port?: number;
+      }>;
       months?: number;
       /** Comma or space separated list of domains never treated as clients. */
       internalDomains?: string;
@@ -217,6 +223,8 @@ interface HalexDesktopApi {
       messages: number;
       folders: string[];
       since: string;
+      mailboxes: Array<{ email: string; contacts: number; messages: number; folders: string[] }>;
+      failures: Array<{ email: string; reason: string }>;
     }>;
     lookupCnpjs(cnpjs: string[]): Promise<{
       records: Array<{

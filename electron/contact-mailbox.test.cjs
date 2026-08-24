@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { aggregateContacts, MAILBOX_PRESETS } = require("./contact-mailbox.cjs");
+const { aggregateContacts, MAILBOX_PRESETS, mergeContacts } = require("./contact-mailbox.cjs");
 
 test("keeps one entry per address with the newest name and subject", () => {
   const contacts = aggregateContacts(
@@ -62,4 +62,18 @@ test("carries the IMAP host of every supported provider", () => {
   assert.equal(MAILBOX_PRESETS.yahoo.host, "imap.mail.yahoo.com");
   assert.equal(MAILBOX_PRESETS.gmail.host, "imap.gmail.com");
   assert.ok(MAILBOX_PRESETS.outlook.port === 993);
+});
+
+test("merges the same address seen in two caixas", () => {
+  const merged = mergeContacts([
+    [{ address: "compras@hospital.com.br", name: "Compras", subject: "Cotação", lastSeenAt: "2026-01-10T00:00:00.000Z", messages: 3 }],
+    [{ address: "compras@hospital.com.br", name: "Maria — Compras", subject: "Pedido 900", lastSeenAt: "2026-08-01T00:00:00.000Z", messages: 5 }],
+    [{ address: "outro@hospital.com.br", name: "", subject: "", lastSeenAt: "2026-02-01T00:00:00.000Z", messages: 1 }],
+  ]);
+
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].address, "compras@hospital.com.br");
+  assert.equal(merged[0].messages, 8);
+  assert.equal(merged[0].name, "Maria — Compras");
+  assert.equal(merged[0].subject, "Pedido 900");
 });

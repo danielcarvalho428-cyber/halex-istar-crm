@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Building2, FileCheck2, LoaderCircle, Mail, MailSearch, Save, Search, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Building2, FileCheck2, LoaderCircle, Mail, MailSearch, Plus, Save, Search, ShieldCheck, Trash2 } from "lucide-react";
 import {
   DEFAULT_INTERNAL_DOMAINS,
   matchContacts,
@@ -31,7 +31,7 @@ export default function ClientEmailsPage() {
   const clients = useDesktopClients();
   const { toast } = useAppUX();
   const [mailbox, setMailbox] = useState<Mailbox | null>(null);
-  const [password, setPassword] = useState("");
+  const [passwords, setPasswords] = useState<Record<string, string>>({});
   const [contacts, setContacts] = useState<MailboxContact[]>([]);
   const [scanNote, setScanNote] = useState("");
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
@@ -53,7 +53,11 @@ export default function ClientEmailsPage() {
   const { suggestions, discarded } = useMemo(
     () => matchContacts(clients, contacts, {
       // The mailbox's own domain is ours by definition.
-      internalDomains: [...(mailbox?.internalDomains || []), mailbox?.email.split("@")[1] || ""],
+      internalDomains: [
+        ...(mailbox?.internalDomains || []),
+        // Every caixa we read is ours by definition.
+        ...(mailbox?.mailboxes || []).map((box) => box.email.split("@")[1] || ""),
+      ],
     }),
     [clients, contacts, mailbox],
   );
@@ -82,25 +86,57 @@ export default function ClientEmailsPage() {
     setMailbox((current) => (current ? { ...current, ...patch } : current));
   }
 
+  function updateBox(id: string, patch: Partial<Mailbox["mailboxes"][number]>) {
+    setMailbox((current) => current && {
+      ...current,
+      mailboxes: current.mailboxes.map((box) => (box.id === id ? { ...box, ...patch } : box)),
+    });
+  }
+
+  function addBox() {
+    setMailbox((current) => current && {
+      ...current,
+      mailboxes: [...current.mailboxes, {
+        id: `nova-${Date.now()}`,
+        provider: "gmail",
+        email: "",
+        host: current.presets.gmail?.host || "",
+        port: 993,
+        hasPassword: false,
+      }],
+    });
+  }
+
+  function removeBox(id: string) {
+    setMailbox((current) => current && {
+      ...current,
+      mailboxes: current.mailboxes.filter((box) => box.id !== id),
+    });
+  }
+
   async function saveMailbox() {
     if (!mailbox || !window.halexDesktop) return;
     setBusy("save");
     setError("");
     try {
       await window.halexDesktop.contacts.saveMailbox({
-        provider: mailbox.provider,
-        email: mailbox.email,
-        password: password || undefined,
-        internalDomains: (mailbox.internalDomains || []).join(", "),
-        host: mailbox.host || mailbox.presets[mailbox.provider]?.host,
-        port: mailbox.port,
+        mailboxes: mailbox.mailboxes.map((box) => ({
+          // A caixa added on this screen has no id on record yet.
+          id: box.id.startsWith("nova-") ? "" : box.id,
+          provider: box.provider,
+          email: box.email,
+          password: passwords[box.id] || undefined,
+          host: box.host || mailbox.presets[box.provider]?.host,
+          port: box.port,
+        })),
         months: mailbox.months,
+        internalDomains: (mailbox.internalDomains || []).join(", "),
       });
-      setPassword("");
+      setPasswords({});
       setMailbox(await window.halexDesktop.contacts.getMailbox());
-      toast("Caixa de e-mails salva.");
+      toast("Caixas de e-mail salvas.");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Não foi possível salvar a caixa.");
+      setError(cause instanceof Error ? cause.message : "Não foi possível salvar as caixas.");
     } finally {
       setBusy("");
     }
@@ -116,7 +152,11 @@ export default function ClientEmailsPage() {
       setContacts(result.contacts);
       setAccepted({});
       setScanNote(
-        `${result.contacts.length} endereço(s) em ${result.messages} mensagem(ns) de ${result.folders.join(", ")}, desde ${result.since}.`,
+        `${result.contacts.length} endereço(s) em ${result.messages} mensagem(ns) desde ${result.since}. `
+        + result.mailboxes.map((box) => `${box.email}: ${box.contacts}`).join(" · ")
+        + (result.failures.length
+          ? ` — falharam: ${result.failures.map((box) => `${box.email} (${box.reason})`).join(" · ")}`
+          : ""),
       );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível ler a caixa de e-mails.");
@@ -248,8 +288,6 @@ export default function ClientEmailsPage() {
     }
   }
 
-  const preset = mailbox?.presets?.[mailbox.provider];
-
   return (
     <div className="space-y-6">
       <header className="page-hero">
@@ -299,52 +337,75 @@ export default function ClientEmailsPage() {
       )}
 
       <section className="glass-card p-5">
-        <h2 className="flex items-center gap-2 font-semibold"><Mail size={17} className="text-amber-700" /> 1. Caixa de e-mails</h2>
+        <h2 className="flex items-center gap-2 font-semibold"><Mail size={17} className="text-amber-700" /> 1. Caixas de e-mail</h2>
         {!mailbox ? (
           <p className="mt-3 text-sm text-stone-500">A leitura da caixa está disponível no aplicativo desktop.</p>
         ) : (
           <>
-            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <label className="text-xs font-bold text-stone-500">
-                Provedor
-                <select className="form-input mt-1 w-full text-sm" value={mailbox.provider} onChange={(event) => {
-                  const provider = event.target.value;
-                  const next = mailbox.presets[provider];
-                  updateMailbox({ provider, host: next?.host || "", port: next?.port || 993 });
-                }}>
-                  {Object.entries(mailbox.presets).map(([value, item]) => (
-                    <option key={value} value={value}>{item.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs font-bold text-stone-500">
-                E-mail
-                <input type="email" className="form-input mt-1 w-full text-sm" value={mailbox.email} onChange={(event) => updateMailbox({ email: event.target.value })} placeholder="voce@yahoo.com" />
-              </label>
-              <label className="text-xs font-bold text-stone-500">
-                Senha de aplicativo
-                <input type="password" className="form-input mt-1 w-full text-sm" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={mailbox.hasPassword ? "•••••••• (salva)" : "senha de aplicativo"} />
-              </label>
-              <label className="text-xs font-bold text-stone-500 md:col-span-2">
-                Domínios internos (nunca viram contato de cliente)
-                <input className="form-input mt-1 w-full text-sm" value={(mailbox.internalDomains || []).join(", ")} onChange={(event) => updateMailbox({ internalDomains: event.target.value.split(/[\s,;]+/).filter(Boolean) })} placeholder={DEFAULT_INTERNAL_DOMAINS.join(", ")} />
-              </label>
+            <p className="mt-1 text-xs text-stone-500">
+              Adicione quantas caixas quiser — Yahoo, Gmail, Outlook. A busca lê todas e junta os contatos.
+            </p>
+
+            <div className="mt-4 space-y-3">
+              {mailbox.mailboxes.map((box) => (
+                <div key={box.id} className="grid gap-3 rounded-lg border border-stone-200 p-3 md:grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                  <label className="text-xs font-bold text-stone-500">
+                    Provedor
+                    <select className="form-input mt-1 w-full text-sm" value={box.provider} onChange={(event) => {
+                      const provider = event.target.value;
+                      const next = mailbox.presets[provider];
+                      updateBox(box.id, { provider, host: next?.host || "", port: next?.port || 993 });
+                    }}>
+                      {Object.entries(mailbox.presets).map(([value, item]) => (
+                        <option key={value} value={value}>{item.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-xs font-bold text-stone-500">
+                    E-mail
+                    <input type="email" className="form-input mt-1 w-full text-sm" value={box.email} onChange={(event) => updateBox(box.id, { email: event.target.value })} placeholder="voce@yahoo.com" />
+                  </label>
+                  <label className="text-xs font-bold text-stone-500">
+                    Senha de aplicativo
+                    <input type="password" className="form-input mt-1 w-full text-sm" value={passwords[box.id] || ""} onChange={(event) => setPasswords((current) => ({ ...current, [box.id]: event.target.value }))} placeholder={box.hasPassword ? "•••••••• (salva)" : "senha de aplicativo"} />
+                  </label>
+                  <button type="button" aria-label={`Remover ${box.email || "caixa"}`} onClick={() => removeBox(box.id)} className="self-end rounded-lg border border-stone-200 p-2 text-stone-500 hover:text-red-700">
+                    <Trash2 size={14} />
+                  </button>
+                  <p className="text-[11px] text-stone-500 md:col-span-4">
+                    {box.host || mailbox.presets[box.provider]?.host} · porta {box.port}
+                  </p>
+                </div>
+              ))}
+              <button type="button" onClick={addBox} className="brand-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-bold">
+                <Plus size={14} />
+                Adicionar caixa
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
               <label className="text-xs font-bold text-stone-500">
                 Período (meses)
                 <input type="number" min={1} max={60} className="form-input mt-1 w-full text-sm" value={mailbox.months} onChange={(event) => updateMailbox({ months: Number(event.target.value) })} />
               </label>
+              <label className="text-xs font-bold text-stone-500">
+                Domínios internos (nunca viram contato de cliente)
+                <input className="form-input mt-1 w-full text-sm" value={(mailbox.internalDomains || []).join(", ")} onChange={(event) => updateMailbox({ internalDomains: event.target.value.split(/[\s,;]+/).filter(Boolean) })} placeholder={DEFAULT_INTERNAL_DOMAINS.join(", ")} />
+              </label>
             </div>
+
             <p className="mt-3 text-[11px] text-stone-500">
-              Servidor {mailbox.host || preset?.host} · porta {mailbox.port}. A senha fica criptografada nesta máquina pelo Windows e nunca sai do aplicativo. No Yahoo, gere uma senha de aplicativo em Configurações da conta &gt; Segurança.
+              As senhas ficam criptografadas nesta máquina pelo Windows e nunca saem do aplicativo. No Yahoo e no Gmail, use uma senha de aplicativo — a senha normal da conta não funciona por IMAP.
             </p>
+
             <div className="mt-4 flex flex-wrap gap-2">
               <button type="button" disabled={busy !== ""} onClick={() => void saveMailbox()} className="brand-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-bold">
                 {busy === "save" ? <LoaderCircle className="animate-spin" size={14} /> : <Save size={14} />}
-                Salvar caixa
+                Salvar caixas
               </button>
-              <button type="button" disabled={busy !== "" || !mailbox.hasPassword} onClick={() => void scan()} className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40">
+              <button type="button" disabled={busy !== "" || !mailbox.mailboxes.some((box) => box.hasPassword)} onClick={() => void scan()} className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40">
                 {busy === "scan" ? <LoaderCircle className="animate-spin" size={14} /> : <MailSearch size={14} />}
-                {busy === "scan" ? "Lendo a caixa..." : "Buscar contatos"}
+                {busy === "scan" ? "Lendo as caixas..." : "Buscar contatos"}
               </button>
             </div>
             {scanNote && <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">{scanNote}</p>}
