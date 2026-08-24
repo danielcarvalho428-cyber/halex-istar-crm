@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, LoaderCircle, Mail, MailSearch, Save, ShieldCheck } from "lucide-react";
+import { ArrowLeft, LoaderCircle, Mail, MailSearch, Save, Search, ShieldCheck } from "lucide-react";
 import {
   DEFAULT_INTERNAL_DOMAINS,
   matchContacts,
@@ -29,6 +29,10 @@ export default function ClientEmailsPage() {
   const [contacts, setContacts] = useState<MailboxContact[]>([]);
   const [scanNote, setScanNote] = useState("");
   const [accepted, setAccepted] = useState<Record<string, boolean>>({});
+  // Address the user picked instead of the proposed one, per client.
+  const [chosen, setChosen] = useState<Record<string, string>>({});
+  const [manualFor, setManualFor] = useState("");
+  const [manualQuery, setManualQuery] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
 
@@ -48,6 +52,21 @@ export default function ClientEmailsPage() {
   const isAccepted = (id: string, confidence: ContactSuggestion["confidence"]) =>
     accepted[id] ?? confidence === "alta";
   const acceptedSuggestions = suggestions.filter((item) => isAccepted(item.client.id, item.confidence));
+  const addressFor = (suggestion: ContactSuggestion) =>
+    chosen[suggestion.client.id] || suggestion.contact.address;
+
+  const withoutSuggestion = useMemo(() => {
+    const proposed = new Set(suggestions.map((item) => item.client.id));
+    return clients.filter((client) => !client.email?.trim() && !proposed.has(client.id));
+  }, [clients, suggestions]);
+
+  const manualMatches = useMemo(() => {
+    const needle = manualQuery.trim().toLowerCase();
+    if (!needle) return [];
+    return contacts
+      .filter((contact) => `${contact.address} ${contact.name} ${contact.subject}`.toLowerCase().includes(needle))
+      .slice(0, 20);
+  }, [contacts, manualQuery]);
 
   function updateMailbox(patch: Partial<Mailbox>) {
     setMailbox((current) => (current ? { ...current, ...patch } : current));
@@ -103,11 +122,13 @@ export default function ClientEmailsPage() {
     let saved = 0;
     try {
       for (const suggestion of acceptedSuggestions) {
+        // saveClient overwrites every column, so the whole row goes back with
+        // only the e-mail changed — otherwise CNPJ, cidade e histórico somem.
+        const stored = await window.halexDesktop.clients.get(suggestion.client.id);
+        if (!stored) continue;
         await window.halexDesktop.clients.save({
-          id: suggestion.client.id,
-          name: suggestion.client.name,
-          code: suggestion.client.code,
-          email: suggestion.contact.address,
+          ...stored,
+          email: addressFor(suggestion),
         });
         saved += 1;
       }
@@ -115,6 +136,25 @@ export default function ClientEmailsPage() {
       toast(`${saved} e-mail(s) gravado(s) no cadastro.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível gravar os e-mails.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function assignAddress(clientId: string, address: string) {
+    if (!window.halexDesktop) return;
+    setBusy("apply");
+    setError("");
+    try {
+      const stored = await window.halexDesktop.clients.get(clientId);
+      if (!stored) throw new Error("Cliente não encontrado.");
+      await window.halexDesktop.clients.save({ ...stored, email: address });
+      notifyCrmDataChanged();
+      setManualFor("");
+      setManualQuery("");
+      toast(`E-mail gravado: ${address}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível gravar o e-mail.");
     } finally {
       setBusy("");
     }
@@ -238,7 +278,23 @@ export default function ClientEmailsPage() {
                         </span>
                       </span>
                       <span className="mt-1 block text-[11px] font-bold text-stone-600">{identity.code} · {identity.cnpj}</span>
-                      <span className="mt-2 block text-sm font-semibold text-amber-800">{suggestion.contact.address}</span>
+                      {suggestion.alternatives.length > 0 ? (
+                        <select
+                          aria-label={`Endereço de ${suggestion.client.name}`}
+                          className="form-input mt-2 w-full max-w-md text-sm font-semibold text-amber-800"
+                          value={addressFor(suggestion)}
+                          onClick={(event) => event.preventDefault()}
+                          onChange={(event) => setChosen((current) => ({ ...current, [suggestion.client.id]: event.target.value }))}
+                        >
+                          {[suggestion.contact, ...suggestion.alternatives].map((option) => (
+                            <option key={option.address} value={option.address}>
+                              {option.address}{option.name ? ` — ${option.name}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="mt-2 block text-sm font-semibold text-amber-800">{suggestion.contact.address}</span>
+                      )}
                       <span className="mt-1 block text-[11px] text-stone-500">
                         {suggestion.evidence} · {suggestion.contact.messages} mensagem(ns)
                         {suggestion.contact.name ? ` · "${suggestion.contact.name}"` : ""}
@@ -251,6 +307,62 @@ export default function ClientEmailsPage() {
           )}
         </section>
       )}
+      {contacts.length > 0 && withoutSuggestion.length > 0 && (
+        <section className="glass-card overflow-hidden">
+          <div className="border-b border-stone-200 p-4">
+            <h2 className="font-semibold">3. Sem sugestão automática</h2>
+            <p className="mt-1 text-xs text-stone-500">
+              {withoutSuggestion.length} cliente(s) sem endereço compatível. Busque manualmente entre os {contacts.length} endereços lidos da caixa.
+            </p>
+          </div>
+          <div className="divide-y divide-stone-100">
+            {withoutSuggestion.slice(0, 40).map((client) => {
+              const identity = clientIdentityLabel(client);
+              const open = manualFor === client.id;
+              return (
+                <div key={client.id} className="p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <strong className="text-sm">{client.name}</strong>
+                      <p className="mt-1 text-[11px] font-bold text-stone-600">{identity.code} · {identity.cnpj}</p>
+                    </div>
+                    <button type="button" onClick={() => { setManualFor(open ? "" : client.id); setManualQuery(""); }} className="brand-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-bold">
+                      <Search size={14} />
+                      {open ? "Fechar" : "Procurar endereço"}
+                    </button>
+                  </div>
+                  {open && (
+                    <div className="mt-3">
+                      <input autoFocus className="form-input w-full text-sm" value={manualQuery} onChange={(event) => setManualQuery(event.target.value)} placeholder="Buscar por endereço, nome ou assunto" />
+                      <ul className="mt-2 divide-y divide-stone-100 rounded-lg border border-stone-200">
+                        {manualMatches.length === 0 ? (
+                          <li className="p-3 text-xs text-stone-500">{manualQuery ? "Nenhum endereço encontrado." : "Digite para buscar."}</li>
+                        ) : manualMatches.map((option) => (
+                          <li key={option.address} className="flex flex-wrap items-center justify-between gap-2 p-3">
+                            <span className="min-w-0 text-xs">
+                              <strong className="text-amber-800">{option.address}</strong>
+                              <span className="mt-0.5 block text-stone-500">
+                                {option.name || "sem nome"} · {option.messages} mensagem(ns){option.subject ? ` · "${option.subject.slice(0, 60)}"` : ""}
+                              </span>
+                            </span>
+                            <button type="button" disabled={busy !== ""} onClick={() => void assignAddress(client.id, option.address)} className="brand-button inline-flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold disabled:opacity-40">
+                              Usar este
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {withoutSuggestion.length > 40 && (
+            <p className="border-t border-stone-200 p-3 text-center text-xs text-stone-500">Mostrando 40 de {withoutSuggestion.length} clientes.</p>
+          )}
+        </section>
+      )}
+
     </div>
   );
 }

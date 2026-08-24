@@ -147,3 +147,39 @@ test("keeps the strongest address when several mention the same client", () => {
   );
   assert.equal(suggestion.contact.address, "compras@ortopedicoceres.com.br");
 });
+
+test("prefers the setor mailbox over a personal one at the same client", () => {
+  const [suggestion] = matchContactsToClients(
+    [client({ id: "a", name: "HOSPITAL ORTOPEDICO CERES" })],
+    [
+      contact({ address: "maria@ortopedicoceres.com.br", name: "Maria Ortopedico Ceres" }),
+      contact({ address: "compras@ortopedicoceres.com.br", name: "Compras Ortopedico Ceres" }),
+    ],
+  );
+  assert.equal(suggestion.contact.address, "compras@ortopedicoceres.com.br");
+  assert.match(suggestion.evidence, /caixa de setor/);
+  // The runner-up stays available on the screen.
+  assert.deepEqual(suggestion.alternatives.map((item) => item.address), ["maria@ortopedicoceres.com.br"]);
+});
+
+test("never proposes an address another cadastro already uses", () => {
+  const suggestions = matchContactsToClients(
+    [
+      client({ id: "a", name: "HOSPITAL ORTOPEDICO CERES", email: "compras@ortopedicoceres.com.br" }),
+      client({ id: "b", name: "HOSPITAL ORTOPEDICO CERES FILIAL" }),
+    ],
+    [contact({ address: "compras@ortopedicoceres.com.br", name: "Ortopedico Ceres" })],
+  );
+  assert.deepEqual(suggestions, []);
+});
+
+test("a domain that already belongs to a client is off limits for the others", () => {
+  const suggestions = matchContactsToClients(
+    [
+      client({ id: "a", name: "CLINICA VIDA PLENA", email: "compras@vidaplena.com.br" }),
+      client({ id: "b", name: "CLINICA VIDA PLENA SUL" }),
+    ],
+    [contact({ address: "financeiro@vidaplena.com.br", name: "Vida Plena" })],
+  );
+  assert.deepEqual(suggestions, []);
+});

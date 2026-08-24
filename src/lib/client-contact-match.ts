@@ -19,6 +19,8 @@ export type ContactSuggestion = {
   confidence: "alta" | "media" | "baixa";
   /** Why this address was proposed, shown on the review screen. */
   evidence: string;
+  /** Runners-up, so the screen can offer them without a new varredura. */
+  alternatives: MailboxContact[];
 };
 
 /**
@@ -31,6 +33,16 @@ const GENERIC_NAME_TOKENS = new Set([
   "MEDICO", "MEDICA", "SAUDE", "INSTITUTO", "ASSOCIACAO", "FUNDACAO", "MUNICIPAL",
   "MUNICIPIO", "PREFEITURA", "ESTADO", "SECRETARIA", "SERVICOS", "DISTRIBUIDORA",
   "FARMACIA", "GRUPO", "UNIDADE", "SANTA", "SAO", "NOSSA", "SENHORA",
+]);
+
+/**
+ * Setores que respondem por compras e notas fiscais. A caixa do setor é um
+ * contato melhor que a pessoal: ela sobrevive à troca de funcionário.
+ */
+const ROLE_MAILBOXES = new Set([
+  "compras", "compra", "licitacao", "licitacoes", "faturamento", "financeiro",
+  "suprimentos", "almoxarifado", "nfe", "notas", "notafiscal", "contato",
+  "administrativo", "recebimento", "farmacia",
 ]);
 
 const PERSONAL_MAIL_DOMAINS = new Set([
@@ -49,6 +61,12 @@ export function nameTokens(value?: string | null) {
   return normalizeText(value)
     .split(/[^A-Z0-9]+/)
     .filter((token) => token.length >= 3 && !GENERIC_NAME_TOKENS.has(token));
+}
+
+/** "compras@hospital.com.br" is a setor mailbox, "maria@..." is not. */
+export function isRoleMailbox(address: string) {
+  const local = address.split("@")[0]?.toLowerCase().replace(/[^a-z]/g, "") || "";
+  return ROLE_MAILBOXES.has(local);
 }
 
 function emailDomain(address: string) {
@@ -110,6 +128,10 @@ export function scoreContact(client: CrmClient, contact: MailboxContact) {
   }
   // Repeated correspondence with the same address adds a little confidence.
   if (score > 0 && contact.messages > 1) score += Math.min(10, contact.messages);
+  if (score > 0 && isRoleMailbox(contact.address)) {
+    score += 12;
+    evidence.push("caixa de setor");
+  }
 
   return { score, evidence: evidence.join(" · ") };
 }
@@ -178,23 +200,47 @@ export function matchContacts(
     .filter((contact) => isInternal(contact.address, internalDomains))
     .map((contact) => ({ address: contact.address, reason: "domínio interno", clients: 0 }));
 
+  // An address already in a cadastro belongs to that client and to nobody else.
+  const taken = new Set(
+    clients.map((client) => client.email?.trim().toLowerCase()).filter(Boolean) as string[],
+  );
+  // Same for a corporate domain whose owner is already known: another client
+  // must never inherit an address from it.
+  const domainOwner = new Map<string, string>();
+  for (const client of clients) {
+    const address = client.email?.trim().toLowerCase();
+    if (!address) continue;
+    const domain = domainIdentity(address);
+    if (domain) domainOwner.set(emailDomain(address), client.id);
+  }
+
   const pending = clients.filter((client) => !client.email?.trim());
-  const best = pending
-    .map((client) => {
-      let winner: ContactSuggestion | null = null;
-      for (const contact of usable) {
-        const { score, evidence } = scoreContact(client, contact);
-        if (score < MIN_CONTACT_SCORE) continue;
-        if (winner && score <= winner.score) continue;
-        winner = { client, contact, score, confidence: confidenceOf(score), evidence };
-      }
-      return winner;
-    })
-    .filter((suggestion): suggestion is ContactSuggestion => suggestion !== null);
+  const ranked = pending.map((client) => {
+    const scored = usable
+      .filter((contact) => !taken.has(contact.address))
+      .filter((contact) => {
+        const owner = domainOwner.get(emailDomain(contact.address));
+        return !owner || owner === client.id;
+      })
+      .map((contact) => ({ contact, ...scoreContact(client, contact) }))
+      .filter((item) => item.score >= MIN_CONTACT_SCORE)
+      .sort((a, b) => b.score - a.score || a.contact.address.localeCompare(b.contact.address));
+
+    if (scored.length === 0) return null;
+    const [best, ...rest] = scored;
+    return {
+      client,
+      contact: best.contact,
+      score: best.score,
+      confidence: confidenceOf(best.score),
+      evidence: best.evidence,
+      alternatives: rest.slice(0, 3).map((item) => item.contact),
+    } satisfies ContactSuggestion;
+  }).filter((suggestion): suggestion is ContactSuggestion => suggestion !== null);
 
   // One address proposed for many clients is a person who writes about them.
   const clientsPerAddress = new Map<string, number>();
-  for (const suggestion of best) {
+  for (const suggestion of ranked) {
     const address = suggestion.contact.address;
     clientsPerAddress.set(address, (clientsPerAddress.get(address) || 0) + 1);
   }
@@ -204,7 +250,7 @@ export function matchContacts(
     }
   }
 
-  const suggestions = best
+  const suggestions = ranked
     .filter((suggestion) => (clientsPerAddress.get(suggestion.contact.address) || 0) <= MAX_CLIENTS_PER_ADDRESS)
     .sort((a, b) => b.score - a.score || a.client.name.localeCompare(b.client.name));
 
