@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("halexDesktop", {
     setReactivationDecisions: (rows) => ipcRenderer.invoke("db:clients:reactivation", rows),
     importSales: (rows) => ipcRenderer.invoke("db:sales:import", rows),
     lastSalesImport: () => ipcRenderer.invoke("db:sales:lastImport"),
+    salesHistory: () => ipcRenderer.invoke("db:sales:history"),
+    purchases: (clientId) => ipcRenderer.invoke("db:clients:purchases", clientId),
     exportReactivation: (sheets) => ipcRenderer.invoke("export:reactivation", sheets),
     revealFile: (filePath) => ipcRenderer.invoke("export:reveal", filePath),
     save: (value) => ipcRenderer.invoke("db:clients:save", value),

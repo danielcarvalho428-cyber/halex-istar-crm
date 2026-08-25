@@ -37,7 +37,7 @@ import {
   matchReactivationMarks,
   parseReactivationMarks,
 } from "@/lib/reactivation-export";
-import { notifyCrmDataChanged, useDesktopClients } from "@/lib/use-desktop-data";
+import { CRM_DATA_CHANGED_EVENT, notifyCrmDataChanged, useDesktopClients } from "@/lib/use-desktop-data";
 
 const SEGMENT_TONE: Record<string, string> = {
   ativo: "border-emerald-200 bg-emerald-50 text-emerald-800",
@@ -74,8 +74,29 @@ export default function ReactivationPage() {
   const [exported, setExported] = useState("");
   const marksRef = useRef<HTMLInputElement>(null);
 
+  // O histórico fica no banco: ao abrir a tela ele volta sozinho, sem precisar
+  // reimportar o relatório a cada vez que o aplicativo é fechado.
   useEffect(() => {
-    window.halexDesktop?.clients.lastSalesImport().then(setLastImport).catch(() => {});
+    const load = () => {
+      const desktop = window.halexDesktop?.clients;
+      if (!desktop?.salesHistory) return;
+      desktop.lastSalesImport().then(setLastImport).catch(() => {});
+      desktop.salesHistory()
+        .then((history) => {
+          setRows(history.map((item) => ({
+            clientCode: item.code || "",
+            clientName: "",
+            cnpj: String(item.document || "").replace(/\D/g, ""),
+            date: item.purchased_at,
+            document: item.document_number || "",
+            value: Number(item.total_value) || 0,
+          })));
+        })
+        .catch(() => {});
+    };
+    load();
+    window.addEventListener(CRM_DATA_CHANGED_EVENT, load);
+    return () => window.removeEventListener(CRM_DATA_CHANGED_EVENT, load);
   }, []);
 
   const today = localIsoDate();
@@ -318,7 +339,9 @@ export default function ReactivationPage() {
             <h2 className="font-semibold">Relatório de vendas</h2>
             <p className="mt-1 truncate text-xs text-stone-500">
               {fileName || "XLSX, XLS ou CSV com data, cliente e valor"}
-              {lastImport && !fileName ? ` · última importação em ${appDate(lastImport.importedAt.slice(0, 10))}: ${lastImport.purchases} compras` : ""}
+              {lastImport && !fileName
+                ? ` · histórico salvo: ${lastImport.purchases} compra(s) importadas em ${appDate(lastImport.importedAt.slice(0, 10))}`
+                : ""}
             </p>
           </div>
         </div>
@@ -470,6 +493,10 @@ export default function ReactivationPage() {
                           Ligar
                         </a>
                       )}
+                      <Link href={`/dashboard/clientes/historico?id=${summary.client.id}`} className="brand-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-bold">
+                        <History size={14} />
+                        Histórico
+                      </Link>
                       <Link href={`/dashboard/cotacoes/nova?cliente=${summary.client.id}`} className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold">
                         <FilePlus2 size={14} />
                         Cotar

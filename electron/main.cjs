@@ -382,6 +382,8 @@ function registerIpc() {
     shell.showItemInFolder(String(filePath || ""));
     return true;
   });
+  ipcMain.handle("db:sales:history", () => database.listSalesHistory());
+  ipcMain.handle("db:clients:purchases", (_event, clientId) => database.listPurchases(String(clientId || "")));
   ipcMain.handle("db:sales:lastImport", () => {
     try {
       return JSON.parse(database.getSetting("last_sales_import") || "null");

@@ -521,6 +521,15 @@ class LocalDatabase {
     }
   }
 
+  /** Todo o histórico gravado, já com o código do cliente para a análise. */
+  listSalesHistory() {
+    return this.rows(
+      `SELECT p.client_id, p.purchased_at, p.document_number, p.total_value, c.code, c.document
+       FROM purchases p JOIN clients c ON c.id = p.client_id
+       ORDER BY p.purchased_at`,
+    );
+  }
+
   listPurchases(clientId) {
     return this.rows(
       "SELECT * FROM purchases WHERE client_id = ? ORDER BY purchased_at DESC",

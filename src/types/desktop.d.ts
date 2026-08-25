@@ -107,6 +107,21 @@ interface HalexDesktopApi {
       sheets: Array<{ carteira: string; clients: number }>;
     } | null>;
     revealFile(filePath: string): Promise<boolean>;
+    salesHistory(): Promise<Array<{
+      client_id: string;
+      code: string;
+      document: string | null;
+      purchased_at: string;
+      document_number: string | null;
+      total_value: number;
+    }>>;
+    purchases(clientId: string): Promise<Array<{
+      id: string;
+      client_id: string;
+      purchased_at: string;
+      document_number: string | null;
+      total_value: number;
+    }>>;
     lastSalesImport(): Promise<{
       importedAt: string;
       clients: number;

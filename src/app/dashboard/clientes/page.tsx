@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CopyCheck, FilePlus2, MailSearch, Search, UserRoundCheck, MapPin, UserCircle2, Pencil, Trash2 } from "lucide-react";
+import { CopyCheck, FilePlus2, MailSearch, Search, ShoppingBag, UserRoundCheck, MapPin, UserCircle2, Pencil, Trash2 } from "lucide-react";
 import { CARTEIRA_OPTIONS, CLIENT_TYPE_OPTIONS, appDate, clientTypeLabel, money } from "@/lib/crm-preview";
 import { notifyCrmDataChanged, useDesktopClients } from "@/lib/use-desktop-data";
 import { useAppUX } from "@/components/AppUX";
@@ -191,6 +191,7 @@ export default function ClientsPage() {
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
+                <Link href={`/dashboard/clientes/historico?id=${client.id}`} className="brand-secondary inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold"><ShoppingBag size={14} />Ver compras</Link>
                 <Link href={`/dashboard/clientes/novo?editId=${client.id}`} className="brand-secondary inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold"><Pencil size={14} />Editar</Link>
                 <button type="button" onClick={async () => {
                   if (!await confirm({ title: `Excluir ${client.name}?`, description: "O cliente será removido da carteira. Cotações históricas protegidas serão mantidas.", confirmLabel: "Excluir cliente", destructive: true })) return;
