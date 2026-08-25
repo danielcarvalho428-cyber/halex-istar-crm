@@ -14,6 +14,8 @@ export type CrmClient = {
   status: 'Comprar agora' | 'Contato próximo' | 'Em ciclo';
   clientType?: 'hospital' | 'distribuidor' | 'orgao_publico';
   cnpj?: string;
+  /** Situação cadastral na Receita Federal, quando já consultada. */
+  receitaSituacao?: string;
   carteira?: string;
 };
 

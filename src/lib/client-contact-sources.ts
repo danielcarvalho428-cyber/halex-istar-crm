@@ -121,3 +121,20 @@ export function federalUpdates(
 function normalizeText(value: string) {
   return value.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().trim();
 }
+
+/**
+ * A cadastro the Receita no longer considers ATIVA: baixada, inapta, suspensa
+ * or nula. The carteira keeps showing it, marked, because there is history
+ * attached — the vendedor just must not work it as a live client.
+ */
+export function isCnpjBaixado(client: CrmClient) {
+  const situacao = String(client.receitaSituacao || "").trim().toUpperCase();
+  return situacao !== "" && situacao !== "ATIVA";
+}
+
+/** Short label for the client card, e.g. "CNPJ baixado". */
+export function receitaLabel(client: CrmClient) {
+  const situacao = String(client.receitaSituacao || "").trim().toUpperCase();
+  if (!situacao || situacao === "ATIVA") return "";
+  return `CNPJ ${situacao.toLowerCase()}`;
+}

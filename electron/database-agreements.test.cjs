@@ -414,6 +414,34 @@ test("deletes duplicated clients in batch and blocks the ones with quotations", 
   });
 });
 
+test("records the Receita situação without touching the cadastro", async () => {
+  await withDatabase((database) => {
+    database.saveClient({
+      id: "cli-receita",
+      code: "700100",
+      name: "Hospital Baixado",
+      document: "06134926000156",
+      city: "Palmas",
+      phone: "6332361300",
+      carteira: "4648",
+    });
+
+    assert.equal(database.setClientReceitaStatus([{ id: "cli-receita", situacao: "baixada" }]), 1);
+    const client = database.getClient("cli-receita");
+    assert.equal(client.receita_situacao, "BAIXADA");
+    assert.ok(client.receita_checked_at);
+    // Everything the user typed survives the mark.
+    assert.equal(client.city, "Palmas");
+    assert.equal(client.phone, "6332361300");
+    assert.equal(client.carteira, "4648");
+
+    // Rows without a situação, or pointing at a client that no longer exists,
+    // change nothing and are not counted.
+    assert.equal(database.setClientReceitaStatus([{ id: "cli-receita", situacao: "" }, { id: "sumiu", situacao: "ATIVA" }]), 0);
+    assert.equal(database.getClient("cli-receita").receita_situacao, "BAIXADA");
+  });
+});
+
 test("client imports preserve group and client type assignments", async () => {
   await withDatabase((database) => {
     database.importClients([{

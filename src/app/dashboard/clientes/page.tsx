@@ -7,6 +7,7 @@ import { CARTEIRA_OPTIONS, CLIENT_TYPE_OPTIONS, appDate, clientTypeLabel, money 
 import { notifyCrmDataChanged, useDesktopClients } from "@/lib/use-desktop-data";
 import { useAppUX } from "@/components/AppUX";
 import { clientIdentityLabel, quarantinedClientIds } from "@/lib/client-duplicates";
+import { isCnpjBaixado, receitaLabel } from "@/lib/client-contact-sources";
 
 export default function ClientsPage() {
   const [error, setError] = useState("");
@@ -21,6 +22,7 @@ export default function ClientsPage() {
   // Cadastros that repeat a CNPJ stay out of the carteira until the user
   // resolves them, so nobody works a duplicated cliente by accident.
   const quarantined = useMemo(() => quarantinedClientIds(allClients), [allClients]);
+  const baixadosCount = allClients.filter((client) => isCnpjBaixado(client)).length;
   const missingEmailCount = allClients.filter(
     (client) => !quarantined.has(client.id) && !client.email?.trim(),
   ).length;
@@ -28,7 +30,8 @@ export default function ClientsPage() {
     () =>
       allClients.filter((client) => (showQuarantined ? quarantined.has(client.id) : !quarantined.has(client.id)) &&
         (status === "Todos" || client.status === status) &&
-        (clientType === "Todos" || (client.clientType || "hospital") === clientType) &&
+        (clientType === "Todos"
+          || (clientType === "baixados" ? isCnpjBaixado(client) : (client.clientType || "hospital") === clientType)) &&
         (carteira === "Todas" || client.carteira === carteira) &&
         `${client.name} ${client.code} ${client.city} ${client.contact}`
           .toLowerCase()
@@ -74,7 +77,7 @@ export default function ClientsPage() {
           placeholder="Buscar cliente, código, cidade ou contato"
         />
       </div>
-      <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-stone-500">{clients.length} de {allClients.length - quarantined.size} clientes ativos</span><select aria-label="Filtrar por status" className="form-input ml-auto text-xs" value={status} onChange={(e) => setStatus(e.target.value)}><option>Todos</option><option>Comprar agora</option><option>Contato próximo</option><option>Em ciclo</option></select><select aria-label="Filtrar por tipo de cliente" className="form-input text-xs" value={clientType} onChange={(e) => setClientType(e.target.value)}><option value="Todos">Todos os tipos</option>{CLIENT_TYPE_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}</select><select aria-label="Filtrar por carteira" className="form-input text-xs" value={carteira} onChange={(e) => setCarteira(e.target.value)}><option value="Todas">Todas as carteiras</option>{CARTEIRA_OPTIONS.map((item) => (<option key={item} value={item}>{item}</option>))}</select><select aria-label="Ordenar clientes" className="form-input text-xs" value={sort} onChange={(e) => setSort(e.target.value)}><option value="prioridade">Prioridade</option><option value="nome">Nome</option><option value="potencial">Maior potencial</option></select></div>
+      <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-stone-500">{clients.length} de {allClients.length - quarantined.size} clientes ativos</span><select aria-label="Filtrar por status" className="form-input ml-auto text-xs" value={status} onChange={(e) => setStatus(e.target.value)}><option>Todos</option><option>Comprar agora</option><option>Contato próximo</option><option>Em ciclo</option></select><select aria-label="Filtrar por tipo de cliente" className="form-input text-xs" value={clientType} onChange={(e) => setClientType(e.target.value)}><option value="Todos">Todos os tipos</option>{CLIENT_TYPE_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}<option value="baixados">Clientes baixados na Receita{baixadosCount ? ` (${baixadosCount})` : ""}</option></select><select aria-label="Filtrar por carteira" className="form-input text-xs" value={carteira} onChange={(e) => setCarteira(e.target.value)}><option value="Todas">Todas as carteiras</option>{CARTEIRA_OPTIONS.map((item) => (<option key={item} value={item}>{item}</option>))}</select><select aria-label="Ordenar clientes" className="form-input text-xs" value={sort} onChange={(e) => setSort(e.target.value)}><option value="prioridade">Prioridade</option><option value="nome">Nome</option><option value="potencial">Maior potencial</option></select></div>
           <div className="mb-4 flex flex-wrap gap-2">
             <Link href="/dashboard/clientes/novo" className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold">
               <FilePlus2 size={14} />
@@ -105,6 +108,9 @@ export default function ClientsPage() {
                       <span className={`rounded-full px-2 py-1 ${identity.hasCnpj ? "bg-stone-100 text-stone-700" : "bg-amber-50 text-amber-800"}`}>{identity.cnpj}</span>
                       {quarantined.has(client.id) && (
                         <span className="rounded-full bg-red-50 px-2 py-1 text-red-700">Duplicado · quarentena</span>
+                      )}
+                      {isCnpjBaixado(client) && (
+                        <span className="rounded-full bg-red-100 px-2 py-1 uppercase text-red-800">{receitaLabel(client)}</span>
                       )}
                     </div>
                   );

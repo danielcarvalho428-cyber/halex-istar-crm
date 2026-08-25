@@ -9,7 +9,7 @@ import {
   type ContactSuggestion,
   type MailboxContact,
 } from "@/lib/client-contact-match";
-import { clientIdentityLabel } from "@/lib/client-duplicates";
+import { clientIdentityLabel, normalizeCnpj } from "@/lib/client-duplicates";
 import {
   contactsFromLicitacoes,
   federalUpdates,
@@ -233,11 +233,23 @@ export default function ClientEmailsPage() {
       const cnpjs = clients.map((client) => client.cnpj || "").filter(Boolean);
       const result = await window.halexDesktop.contacts.lookupCnpjs(cnpjs);
       setFederal(result.records);
+
+      // The situação stays on the cadastro, so the carteira keeps showing the
+      // CNPJ baixado long after this consulta.
+      const byCnpj = new Map(result.records.map((item) => [normalizeCnpj(item.cnpj), item.situacao]));
+      const marks = clients
+        .map((client) => ({ id: client.id, situacao: byCnpj.get(normalizeCnpj(client.cnpj)) || "" }))
+        .filter((item) => item.situacao);
+      if (marks.length) {
+        await window.halexDesktop.clients.setReceitaStatus(marks);
+        notifyCrmDataChanged();
+      }
       setFederalNote(
         `${result.records.length} CNPJ(s) na Receita · ${result.consulted} consultado(s) agora`
         + `${result.skipped ? ` · ${result.skipped} além do limite desta rodada` : ""}`
         + `${result.failed ? ` · ${result.failed} sem resposta` : ""}`
-        + `${result.invalid ? ` · ${result.invalid} CNPJ(s) inválido(s) no cadastro` : ""}`,
+        + `${result.invalid ? ` · ${result.invalid} CNPJ(s) inválido(s) no cadastro` : ""}`
+        + ` · ${result.records.filter((item) => item.situacao && item.situacao.toUpperCase() !== "ATIVA").length} CNPJ(s) não ativo(s) marcados na carteira`,
       );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível consultar a Receita.");

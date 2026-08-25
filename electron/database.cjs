@@ -170,6 +170,9 @@ class LocalDatabase {
     this.db.run(schema);
     this.ensureColumn("clients", "client_type", "TEXT");
     this.ensureColumn("clients", "carteira", "TEXT");
+    // Situação cadastral na Receita Federal, consultada pelo CNPJ.
+    this.ensureColumn("clients", "receita_situacao", "TEXT");
+    this.ensureColumn("clients", "receita_checked_at", "TEXT");
     this.ensureColumn("quotation_items", "brand", "TEXT");
     this.ensureColumn("products", "pack_size", "INTEGER");
     this.ensureColumn("price_table_items", "pack_size", "INTEGER");
@@ -419,6 +422,28 @@ class LocalDatabase {
     this.persist();
     return true;
   }
+  /**
+   * Records what the Receita says about each CNPJ. Written apart from
+   * saveClient on purpose: it must never touch the columns the user edits.
+   */
+  setClientReceitaStatus(rows) {
+    const now = new Date().toISOString();
+    let updated = 0;
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const id = String(row?.id || "");
+      const situacao = String(row?.situacao || "").trim().toUpperCase();
+      if (!id || !situacao) continue;
+      this.db.run(
+        "UPDATE clients SET receita_situacao = ?, receita_checked_at = ? WHERE id = ?",
+        [situacao, now, id],
+      );
+      // An id that no longer exists changes nothing and must not be counted.
+      updated += this.db.getRowsModified();
+    }
+    if (updated > 0) this.persist();
+    return updated;
+  }
+
   // Batch cleanup for duplicated cadastros: a client that already carries
   // quotations is never removed silently — it comes back as blocked so the
   // screen can tell the user which cadastro to keep.

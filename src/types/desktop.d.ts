@@ -17,6 +17,9 @@ interface DesktopClient {
   status: string;
   /** New fields */
   client_type?: ClientType;
+  /** Situação cadastral na Receita: "ATIVA", "BAIXADA", "INAPTA"… */
+  receita_situacao?: string;
+  receita_checked_at?: string;
   cnpj?: string;
   document?: string;
   carteira?: string;
@@ -78,6 +81,7 @@ interface HalexDesktopApi {
       blocked: Array<{ id: string; name: string; reason: string }>;
     }>;
     save(value: Partial<DesktopClient> & { name: string }): Promise<string>;
+    setReceitaStatus(rows: Array<{ id: string; situacao: string }>): Promise<number>;
   };
   products: {
     list(): Promise<DesktopProduct[]>;

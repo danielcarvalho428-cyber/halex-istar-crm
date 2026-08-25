@@ -354,6 +354,7 @@ function registerIpc() {
     exportClientsSpreadsheet();
     return result;
   });
+  ipcMain.handle("db:clients:receita", (_event, rows) => database.setClientReceitaStatus(rows));
   ipcMain.handle("db:clients:save", (_event, value) => {
     const result = database.saveClient(value);
     exportClientsSpreadsheet();

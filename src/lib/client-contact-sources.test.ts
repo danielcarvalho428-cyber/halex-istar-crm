@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   contactsFromLicitacoes,
+  isCnpjBaixado,
+  receitaLabel,
   federalUpdates,
   type FederalRecord,
 } from "./client-contact-sources.ts";
@@ -128,4 +130,14 @@ test("reports divergent cidade and razão social without changing them", () => {
     "cidade divergente: PALMAS",
     "razão social: COP - CENTRO ONCOLOGICO DE PALMAS LTDA",
   ]);
+});
+
+test("marks every situação that is not ATIVA", () => {
+  assert.equal(isCnpjBaixado(client({ id: "a", name: "X", receitaSituacao: "BAIXADA" })), true);
+  assert.equal(receitaLabel(client({ id: "a", name: "X", receitaSituacao: "BAIXADA" })), "CNPJ baixada");
+  assert.equal(isCnpjBaixado(client({ id: "a", name: "X", receitaSituacao: "INAPTA" })), true);
+  assert.equal(isCnpjBaixado(client({ id: "a", name: "X", receitaSituacao: "ATIVA" })), false);
+  // Never consulted is not the same as irregular.
+  assert.equal(isCnpjBaixado(client({ id: "a", name: "X" })), false);
+  assert.equal(receitaLabel(client({ id: "a", name: "X" })), "");
 });
