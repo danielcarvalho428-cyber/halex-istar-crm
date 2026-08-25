@@ -22,6 +22,7 @@ const commands = [
   ["Produtos", "/dashboard/catalogo", "catálogo tabela preço"],
   ["Acordos de preços", "/dashboard/acordos", "grupo especial"],
   ["Faturamento", "/dashboard/faturamento", "nota fiscal pedido danfe"],
+  ["Reativação de clientes", "/dashboard/reativacao", "inativo parou de comprar reconquista relatório vendas"],
   ["Importar dados", "/dashboard/importar", "planilha excel"],
   ["Backup", "/dashboard/backup-local", "segurança restaurar"],
   ["Configurações", "/dashboard/configuracoes", "email papel timbrado"],

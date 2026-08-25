@@ -423,6 +423,108 @@ class LocalDatabase {
     return true;
   }
   /**
+   * Replaces the purchase history with the relatório just imported and brings
+   * the client metrics along: last_purchase, average_cycle_days, next_purchase
+   * and total_12m are what the agenda and the dashboard already read.
+   */
+  importSalesHistory(rows) {
+    const now = new Date().toISOString();
+    const today = now.slice(0, 10);
+    const clients = this.rows("SELECT id, code, document FROM clients");
+    const byCode = new Map();
+    const byCnpj = new Map();
+    for (const client of clients) {
+      const code = String(client.code || "").replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+      const cnpj = String(client.document || "").replace(/\D/g, "");
+      if (code && !byCode.has(code)) byCode.set(code, client.id);
+      if (cnpj.length === 14 && !byCnpj.has(cnpj)) byCnpj.set(cnpj, client.id);
+    }
+
+    const salesByClient = new Map();
+    let unmatched = 0;
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const date = String(row?.date || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      const code = String(row?.clientCode || "").replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+      const cnpj = String(row?.cnpj || "").replace(/\D/g, "");
+      const clientId = byCode.get(code) || byCnpj.get(cnpj);
+      if (!clientId) {
+        unmatched += 1;
+        continue;
+      }
+      salesByClient.set(clientId, [...(salesByClient.get(clientId) || []), {
+        date,
+        document: String(row?.document || "").slice(0, 40),
+        value: Number(row?.value) || 0,
+      }]);
+    }
+
+    this.db.run("BEGIN");
+    try {
+      let imported = 0;
+      for (const [clientId, sales] of salesByClient) {
+        // A re-import replaces the history of that client instead of doubling it.
+        this.db.run("DELETE FROM purchases WHERE client_id = ?", [clientId]);
+
+        const byDocument = new Map();
+        for (const sale of sales) {
+          const key = `${sale.date}|${sale.document}`;
+          const current = byDocument.get(key);
+          byDocument.set(key, {
+            date: sale.date,
+            document: sale.document,
+            value: (current?.value || 0) + sale.value,
+          });
+        }
+        for (const purchase of byDocument.values()) {
+          this.db.run(
+            "INSERT INTO purchases(id,client_id,purchased_at,document_number,total_value,created_at) VALUES(?,?,?,?,?,?)",
+            [crypto.randomUUID(), clientId, purchase.date, purchase.document || null, purchase.value, now],
+          );
+          imported += 1;
+        }
+
+        const dates = [...new Set(sales.map((sale) => sale.date))].sort();
+        const first = dates[0];
+        const last = dates[dates.length - 1];
+        const span = (Date.parse(`${last}T12:00:00Z`) - Date.parse(`${first}T12:00:00Z`)) / 86400000;
+        const averageCycle = dates.length > 1 ? Math.max(1, Math.round(span / (dates.length - 1))) : 0;
+        const nextPurchase = averageCycle
+          ? new Date(Date.parse(`${last}T12:00:00Z`) + averageCycle * 86400000).toISOString().slice(0, 10)
+          : null;
+        const yearAgo = new Date(Date.parse(`${today}T12:00:00Z`) - 365 * 86400000).toISOString().slice(0, 10);
+        const total12m = sales
+          .filter((sale) => sale.date >= yearAgo)
+          .reduce((sum, sale) => sum + sale.value, 0);
+
+        this.db.run(
+          `UPDATE clients SET last_purchase = ?, average_cycle_days = ?, next_purchase = ?, total_12m = ?, updated_at = ?
+           WHERE id = ?`,
+          [last, averageCycle || null, nextPurchase, total12m, now, clientId],
+        );
+      }
+
+      this.db.run(
+        "INSERT INTO settings(key,value) VALUES('last_sales_import',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [JSON.stringify({ importedAt: now, clients: salesByClient.size, purchases: imported, unmatched })],
+      );
+      this.db.run("COMMIT");
+      this.persist();
+      return { clients: salesByClient.size, purchases: imported, unmatched };
+    } catch (error) {
+      this.db.run("ROLLBACK");
+      throw error;
+    }
+  }
+
+  listPurchases(clientId) {
+    return this.rows(
+      "SELECT * FROM purchases WHERE client_id = ? ORDER BY purchased_at DESC",
+      [clientId],
+    );
+  }
+
+  /**
    * Records what the Receita says about each CNPJ. Written apart from
    * saveClient on purpose: it must never touch the columns the user edits.
    */

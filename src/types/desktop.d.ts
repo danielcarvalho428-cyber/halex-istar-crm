@@ -82,6 +82,19 @@ interface HalexDesktopApi {
     }>;
     save(value: Partial<DesktopClient> & { name: string }): Promise<string>;
     setReceitaStatus(rows: Array<{ id: string; situacao: string }>): Promise<number>;
+    importSales(rows: Array<{
+      clientCode: string;
+      cnpj: string;
+      date: string;
+      document: string;
+      value: number;
+    }>): Promise<{ clients: number; purchases: number; unmatched: number }>;
+    lastSalesImport(): Promise<{
+      importedAt: string;
+      clients: number;
+      purchases: number;
+      unmatched: number;
+    } | null>;
   };
   products: {
     list(): Promise<DesktopProduct[]>;

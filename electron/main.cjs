@@ -354,6 +354,18 @@ function registerIpc() {
     exportClientsSpreadsheet();
     return result;
   });
+  ipcMain.handle("db:sales:import", (_event, rows) => {
+    const result = database.importSalesHistory(rows);
+    exportClientsSpreadsheet();
+    return result;
+  });
+  ipcMain.handle("db:sales:lastImport", () => {
+    try {
+      return JSON.parse(database.getSetting("last_sales_import") || "null");
+    } catch {
+      return null;
+    }
+  });
   ipcMain.handle("db:clients:receita", (_event, rows) => database.setClientReceitaStatus(rows));
   ipcMain.handle("db:clients:save", (_event, value) => {
     const result = database.saveClient(value);

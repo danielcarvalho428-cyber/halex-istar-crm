@@ -9,7 +9,7 @@ export type DuplicateClientGroup = {
   duplicates: CrmClient[];
 };
 
-export function normalizeCnpj(value?: string | null) {
+export function normalizeCnpj(value?: string | number | null) {
   return String(value ?? "").replace(/\D/g, "");
 }
 

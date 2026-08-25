@@ -414,6 +414,46 @@ test("deletes duplicated clients in batch and blocks the ones with quotations", 
   });
 });
 
+test("imports the sales history and refreshes the client metrics", async () => {
+  await withDatabase((database) => {
+    database.saveClient({ id: "cli-vendas", code: "500024", name: "Hospital Comprador", document: "06134926000156" });
+    database.saveClient({ id: "cli-parado", code: "500082", name: "Hospital Parado" });
+
+    const result = database.importSalesHistory([
+      { clientCode: "500024", date: "2026-02-01", document: "1001", value: 2000 },
+      { clientCode: "0500024", date: "2026-04-02", document: "1002", value: 3000 },
+      // Two linhas of the same nota are one purchase with the values added.
+      { clientCode: "500024", date: "2026-06-02", document: "1003", value: 4000 },
+      { cnpj: "06.134.926/0001-56", date: "2026-06-02", document: "1003", value: 1000 },
+      { clientCode: "999999", date: "2026-06-02", document: "1004", value: 500 },
+      { clientCode: "500024", date: "sem data", document: "1005", value: 900 },
+    ]);
+
+    assert.equal(result.clients, 1);
+    assert.equal(result.purchases, 3);
+    assert.equal(result.unmatched, 1);
+
+    const purchases = database.listPurchases("cli-vendas");
+    assert.equal(purchases.length, 3);
+    assert.equal(purchases[0].purchased_at, "2026-06-02");
+    assert.equal(purchases[0].total_value, 5000);
+
+    const client = database.getClient("cli-vendas");
+    assert.equal(client.last_purchase, "2026-06-02");
+    // Three purchases spread over 121 days: about 60 days between them.
+    assert.equal(client.average_cycle_days, 61);
+    assert.ok(client.next_purchase > "2026-06-02");
+    assert.equal(client.total_12m, 10000);
+
+    // A client absent from the relatório keeps its own cadastro untouched.
+    assert.equal(database.getClient("cli-parado").name, "Hospital Parado");
+
+    // Re-importing replaces the history instead of duplicating it.
+    database.importSalesHistory([{ clientCode: "500024", date: "2026-07-01", document: "2001", value: 700 }]);
+    assert.equal(database.listPurchases("cli-vendas").length, 1);
+  });
+});
+
 test("records the Receita situação without touching the cadastro", async () => {
   await withDatabase((database) => {
     database.saveClient({

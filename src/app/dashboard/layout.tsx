@@ -19,6 +19,7 @@ import {
   Settings,
   SlidersHorizontal,
   X,
+  TrendingDown,
 } from "lucide-react";
 import type { AccountRole } from "../../types";
 import CompanyFooter from "../../components/CompanyFooter";
@@ -112,6 +113,11 @@ export default function DashboardLayout({
           href: "/dashboard/agenda",
           icon: <CalendarClock size={17} />,
           label: "Agenda e retornos",
+        },
+        {
+          href: "/dashboard/reativacao",
+          icon: <TrendingDown size={17} />,
+          label: "Reativação",
         },
       ],
     },

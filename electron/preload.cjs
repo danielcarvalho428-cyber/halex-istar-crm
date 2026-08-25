@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld("halexDesktop", {
     delete: (id) => ipcRenderer.invoke("db:clients:delete", id),
     deleteMany: (ids) => ipcRenderer.invoke("db:clients:deleteMany", ids),
     setReceitaStatus: (rows) => ipcRenderer.invoke("db:clients:receita", rows),
+    importSales: (rows) => ipcRenderer.invoke("db:sales:import", rows),
+    lastSalesImport: () => ipcRenderer.invoke("db:sales:lastImport"),
     save: (value) => ipcRenderer.invoke("db:clients:save", value),
   },
   products: {
