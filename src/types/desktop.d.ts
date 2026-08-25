@@ -20,6 +20,10 @@ interface DesktopClient {
   /** Situação cadastral na Receita: "ATIVA", "BAIXADA", "INAPTA"… */
   receita_situacao?: string;
   receita_checked_at?: string;
+  /** "SIM", "NÃO" or "TALVEZ", marked on the planilha de reativação. */
+  reactivation_decision?: string;
+  reactivation_note?: string;
+  reactivation_decided_at?: string;
   cnpj?: string;
   document?: string;
   carteira?: string;
@@ -82,6 +86,11 @@ interface HalexDesktopApi {
     }>;
     save(value: Partial<DesktopClient> & { name: string }): Promise<string>;
     setReceitaStatus(rows: Array<{ id: string; situacao: string }>): Promise<number>;
+    setReactivationDecisions(rows: Array<{
+      id: string;
+      decision: string;
+      note?: string;
+    }>): Promise<number>;
     importSales(rows: Array<{
       clientCode: string;
       cnpj: string;

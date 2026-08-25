@@ -389,6 +389,7 @@ function registerIpc() {
       return null;
     }
   });
+  ipcMain.handle("db:clients:reactivation", (_event, rows) => database.setReactivationDecisions(rows));
   ipcMain.handle("db:clients:receita", (_event, rows) => database.setClientReceitaStatus(rows));
   ipcMain.handle("db:clients:save", (_event, value) => {
     const result = database.saveClient(value);

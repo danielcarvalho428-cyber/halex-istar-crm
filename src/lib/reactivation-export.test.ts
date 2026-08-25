@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildReactivationSheets, SEM_CARTEIRA } from "./reactivation-export.ts";
+import {
+  buildReactivationSheets,
+  matchReactivationMarks,
+  parseReactivationMarks,
+  SEM_CARTEIRA,
+} from "./reactivation-export.ts";
 import { summarizeClientSales, type SalesRow } from "./sales-history.ts";
 import type { CrmClient } from "./crm-preview.ts";
 
@@ -82,4 +87,50 @@ test("leaves the days column empty for who never bought in the period", () => {
   assert.equal(sheet.rows[0].diasSemComprar, "");
   assert.equal(sheet.rows[0].compras, 0);
   assert.equal(sheet.rows[0].situacao, "Sem compra no período");
+});
+
+const markedSheet = [
+  ["Código", "Cliente", "CNPJ", "Cidade", "Reconquistar?", "Observações"],
+  ["500024", "HOSPITAL GRANDE", "06.134.926/0001-56", "Goiânia", "SIM", "Ligar para o Dr. Carlos"],
+  ["500082", "HOSPITAL MEDIO", "", "", "não", ""],
+  ["500100", "CLINICA MINEIRA", "", "", "Talvez", "Voltar em janeiro"],
+  ["500200", "HOSPITAL NORTE", "", "", "", ""],
+  ["999999", "CLIENTE DE FORA", "", "", "SIM", ""],
+];
+
+test("lê as marcações da planilha e ignora quem ficou em branco", () => {
+  const marks = parseReactivationMarks(markedSheet);
+
+  assert.equal(marks.length, 4);
+  assert.deepEqual(marks.map((mark) => mark.decision), ["SIM", "NÃO", "TALVEZ", "SIM"]);
+  assert.equal(marks[0].note, "Ligar para o Dr. Carlos");
+  assert.equal(marks[0].cnpj, "06134926000156");
+});
+
+test("aceita a planilha com colunas fora de ordem e sem cabeçalho na primeira linha", () => {
+  const marks = parseReactivationMarks([
+    ["Reativação — carteira 4104"],
+    [],
+    ["Cliente", "Reconquistar?", "Código"],
+    ["HOSPITAL GRANDE", "S", "500024"],
+  ]);
+  assert.equal(marks.length, 1);
+  assert.equal(marks[0].decision, "SIM");
+  assert.equal(marks[0].code, "500024");
+});
+
+test("liga cada marcação ao cadastro e separa quem não existe", () => {
+  const { matched, unmatched } = matchReactivationMarks(clients, parseReactivationMarks(markedSheet));
+
+  assert.deepEqual(matched.map((item) => [item.clientId, item.decision]), [
+    ["a", "SIM"],
+    ["b", "NÃO"],
+    ["c", "TALVEZ"],
+  ]);
+  assert.equal(matched[0].note, "Ligar para o Dr. Carlos");
+  assert.deepEqual(unmatched.map((item) => item.name), ["CLIENTE DE FORA"]);
+});
+
+test("sem coluna Reconquistar não há o que importar", () => {
+  assert.deepEqual(parseReactivationMarks([["Código", "Cliente"], ["1", "X"]]), []);
 });

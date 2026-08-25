@@ -23,6 +23,7 @@ export default function ClientsPage() {
   // resolves them, so nobody works a duplicated cliente by accident.
   const quarantined = useMemo(() => quarantinedClientIds(allClients), [allClients]);
   const baixadosCount = allClients.filter((client) => isCnpjBaixado(client)).length;
+  const reconquistarCount = allClients.filter((client) => client.reactivationDecision === "SIM").length;
   const missingEmailCount = allClients.filter(
     (client) => !quarantined.has(client.id) && !client.email?.trim(),
   ).length;
@@ -31,7 +32,11 @@ export default function ClientsPage() {
       allClients.filter((client) => (showQuarantined ? quarantined.has(client.id) : !quarantined.has(client.id)) &&
         (status === "Todos" || client.status === status) &&
         (clientType === "Todos"
-          || (clientType === "baixados" ? isCnpjBaixado(client) : (client.clientType || "hospital") === clientType)) &&
+          || (clientType === "baixados"
+            ? isCnpjBaixado(client)
+            : clientType === "reconquistar"
+              ? client.reactivationDecision === "SIM"
+              : (client.clientType || "hospital") === clientType)) &&
         (carteira === "Todas" || client.carteira === carteira) &&
         `${client.name} ${client.code} ${client.city} ${client.contact}`
           .toLowerCase()
@@ -77,7 +82,7 @@ export default function ClientsPage() {
           placeholder="Buscar cliente, código, cidade ou contato"
         />
       </div>
-      <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-stone-500">{clients.length} de {allClients.length - quarantined.size} clientes ativos</span><select aria-label="Filtrar por status" className="form-input ml-auto text-xs" value={status} onChange={(e) => setStatus(e.target.value)}><option>Todos</option><option>Comprar agora</option><option>Contato próximo</option><option>Em ciclo</option></select><select aria-label="Filtrar por tipo de cliente" className="form-input text-xs" value={clientType} onChange={(e) => setClientType(e.target.value)}><option value="Todos">Todos os tipos</option>{CLIENT_TYPE_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}<option value="baixados">Clientes baixados na Receita{baixadosCount ? ` (${baixadosCount})` : ""}</option></select><select aria-label="Filtrar por carteira" className="form-input text-xs" value={carteira} onChange={(e) => setCarteira(e.target.value)}><option value="Todas">Todas as carteiras</option>{CARTEIRA_OPTIONS.map((item) => (<option key={item} value={item}>{item}</option>))}</select><select aria-label="Ordenar clientes" className="form-input text-xs" value={sort} onChange={(e) => setSort(e.target.value)}><option value="prioridade">Prioridade</option><option value="nome">Nome</option><option value="potencial">Maior potencial</option></select></div>
+      <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-stone-500">{clients.length} de {allClients.length - quarantined.size} clientes ativos</span><select aria-label="Filtrar por status" className="form-input ml-auto text-xs" value={status} onChange={(e) => setStatus(e.target.value)}><option>Todos</option><option>Comprar agora</option><option>Contato próximo</option><option>Em ciclo</option></select><select aria-label="Filtrar por tipo de cliente" className="form-input text-xs" value={clientType} onChange={(e) => setClientType(e.target.value)}><option value="Todos">Todos os tipos</option>{CLIENT_TYPE_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}<option value="baixados">Clientes baixados na Receita{baixadosCount ? ` (${baixadosCount})` : ""}</option><option value="reconquistar">Marcados para reconquistar{reconquistarCount ? ` (${reconquistarCount})` : ""}</option></select><select aria-label="Filtrar por carteira" className="form-input text-xs" value={carteira} onChange={(e) => setCarteira(e.target.value)}><option value="Todas">Todas as carteiras</option>{CARTEIRA_OPTIONS.map((item) => (<option key={item} value={item}>{item}</option>))}</select><select aria-label="Ordenar clientes" className="form-input text-xs" value={sort} onChange={(e) => setSort(e.target.value)}><option value="prioridade">Prioridade</option><option value="nome">Nome</option><option value="potencial">Maior potencial</option></select></div>
           <div className="mb-4 flex flex-wrap gap-2">
             <Link href="/dashboard/clientes/novo" className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold">
               <FilePlus2 size={14} />
@@ -111,6 +116,17 @@ export default function ClientsPage() {
                       )}
                       {isCnpjBaixado(client) && (
                         <span className="rounded-full bg-red-100 px-2 py-1 uppercase text-red-800">{receitaLabel(client)}</span>
+                      )}
+                      {client.reactivationDecision && (
+                        <span className={`rounded-full px-2 py-1 uppercase ${
+                          client.reactivationDecision === "SIM"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : client.reactivationDecision === "NÃO"
+                              ? "bg-stone-200 text-stone-600"
+                              : "bg-amber-100 text-amber-800"
+                        }`}>
+                          Reconquistar: {client.reactivationDecision}
+                        </span>
                       )}
                     </div>
                   );
@@ -168,9 +184,12 @@ export default function ClientsPage() {
               </div>
             </dl>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-stone-500">
-                {client.contact} · {client.phone}
-              </p>
+              <div className="text-xs text-stone-500">
+                <p>{client.contact} · {client.phone}</p>
+                {client.reactivationNote && (
+                  <p className="mt-1 italic text-stone-600">“{client.reactivationNote}”</p>
+                )}
+              </div>
               <div className="flex flex-wrap gap-2">
                 <Link href={`/dashboard/clientes/novo?editId=${client.id}`} className="brand-secondary inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold"><Pencil size={14} />Editar</Link>
                 <button type="button" onClick={async () => {

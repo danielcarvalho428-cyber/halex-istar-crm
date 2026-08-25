@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   AlertTriangle,
   Clipboard,
+  ClipboardCheck,
   Check,
   FilePlus2,
   FileSpreadsheet,
@@ -31,7 +32,11 @@ import {
   type SalesRow,
   type SalesSegment,
 } from "@/lib/sales-history";
-import { buildReactivationSheets } from "@/lib/reactivation-export";
+import {
+  buildReactivationSheets,
+  matchReactivationMarks,
+  parseReactivationMarks,
+} from "@/lib/reactivation-export";
 import { notifyCrmDataChanged, useDesktopClients } from "@/lib/use-desktop-data";
 
 const SEGMENT_TONE: Record<string, string> = {
@@ -67,6 +72,7 @@ export default function ReactivationPage() {
   const [copied, setCopied] = useState(false);
   const [registering, setRegistering] = useState<Record<string, boolean>>({});
   const [exported, setExported] = useState("");
+  const marksRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     window.halexDesktop?.clients.lastSalesImport().then(setLastImport).catch(() => {});
@@ -85,9 +91,11 @@ export default function ReactivationPage() {
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return summaries.filter((summary) => {
+      // Quem já foi marcado como "NÃO" sai da fila de reconquista: a decisão
+      // foi tomada e não deve voltar a ocupar a lista.
       const matchesFilter = filter === "todos"
         || (filter === "reconquista"
-          ? RECONQUEST_SEGMENTS.has(summary.segment)
+          ? RECONQUEST_SEGMENTS.has(summary.segment) && summary.client.reactivationDecision !== "NÃO"
           : summary.segment === filter);
       const matchesQuery = !needle
         || `${summary.client.name} ${summary.client.code} ${summary.client.city}`.toLowerCase().includes(needle);
@@ -213,6 +221,52 @@ export default function ReactivationPage() {
     }
   }
 
+  /** Traz de volta a planilha marcada e grava a decisão em cada cadastro. */
+  async function importMarks(file: File) {
+    if (!window.halexDesktop) {
+      setError("A importação das marcações está disponível no aplicativo desktop.");
+      return;
+    }
+    setBusy("marks");
+    setError("");
+    setNotice("");
+    try {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(await file.arrayBuffer(), { cellDates: false });
+      // Cada carteira é uma aba: as marcações de todas entram de uma vez.
+      const marks = workbook.SheetNames.flatMap((name) =>
+        parseReactivationMarks(
+          XLSX.utils.sheet_to_json<Array<unknown>>(workbook.Sheets[name], { header: 1, defval: "", raw: false }),
+        ));
+      if (marks.length === 0) {
+        throw new Error("Nenhuma marcação encontrada. Confira se a coluna Reconquistar? foi preenchida.");
+      }
+
+      const { matched, unmatched } = matchReactivationMarks(clients, marks);
+      await window.halexDesktop.clients.setReactivationDecisions(matched.map((item) => ({
+        id: item.clientId,
+        decision: item.decision,
+        note: item.note,
+      })));
+      notifyCrmDataChanged();
+
+      const counts = matched.reduce<Record<string, number>>((acc, item) => {
+        if (item.decision) acc[item.decision] = (acc[item.decision] || 0) + 1;
+        return acc;
+      }, {});
+      setNotice(
+        `${matched.length} decisão(ões) gravada(s) no cadastro`
+        + `${Object.entries(counts).map(([decision, count]) => ` · ${decision}: ${count}`).join("")}`
+        + `${unmatched.length ? ` · ${unmatched.length} linha(s) sem cliente correspondente` : ""}.`,
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível ler a planilha marcada.");
+    } finally {
+      setBusy("");
+      if (marksRef.current) marksRef.current.value = "";
+    }
+  }
+
   async function copyList() {
     const text = visible
       .map((item) => [
@@ -329,6 +383,14 @@ export default function ReactivationPage() {
                   {busy === "export" ? <RefreshCw className="animate-spin" size={14} /> : <FileSpreadsheet size={14} />}
                   Exportar por carteira
                 </button>
+                <button type="button" disabled={busy !== ""} onClick={() => marksRef.current?.click()} className="brand-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-bold disabled:opacity-40">
+                  {busy === "marks" ? <RefreshCw className="animate-spin" size={14} /> : <ClipboardCheck size={14} />}
+                  Importar marcações
+                </button>
+                <input ref={marksRef} type="file" accept=".xlsx,.xls" className="sr-only" onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void importMarks(file);
+                }} />
               </div>
             </div>
 
@@ -353,6 +415,17 @@ export default function ReactivationPage() {
                         {isCnpjBaixado(summary.client) && (
                           <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase text-red-800">CNPJ baixado</span>
                         )}
+                        {summary.client.reactivationDecision && (
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            summary.client.reactivationDecision === "SIM"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : summary.client.reactivationDecision === "NÃO"
+                                ? "bg-stone-200 text-stone-600"
+                                : "bg-amber-100 text-amber-800"
+                          }`}>
+                            Reconquistar: {summary.client.reactivationDecision}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 text-[11px] font-bold text-stone-600">{identity.code} · {identity.cnpj}</p>
                       <p className="mt-1 text-xs text-stone-500">
@@ -360,6 +433,9 @@ export default function ReactivationPage() {
                         {summary.client.phone ? ` · ${summary.client.phone}` : ""}
                         {summary.client.email ? ` · ${summary.client.email}` : " · sem e-mail"}
                       </p>
+                      {summary.client.reactivationNote && (
+                        <p className="mt-1 text-xs italic text-stone-600">“{summary.client.reactivationNote}”</p>
+                      )}
                     </div>
 
                     <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4 xl:grid-cols-2">

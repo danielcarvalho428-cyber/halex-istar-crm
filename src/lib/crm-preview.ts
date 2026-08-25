@@ -16,6 +16,9 @@ export type CrmClient = {
   cnpj?: string;
   /** Situação cadastral na Receita Federal, quando já consultada. */
   receitaSituacao?: string;
+  /** Decisão de reconquista marcada na planilha de reativação. */
+  reactivationDecision?: string;
+  reactivationNote?: string;
   carteira?: string;
 };
 

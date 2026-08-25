@@ -173,6 +173,10 @@ class LocalDatabase {
     // Situação cadastral na Receita Federal, consultada pelo CNPJ.
     this.ensureColumn("clients", "receita_situacao", "TEXT");
     this.ensureColumn("clients", "receita_checked_at", "TEXT");
+    // Decisão de reconquista trazida de volta da planilha de reativação.
+    this.ensureColumn("clients", "reactivation_decision", "TEXT");
+    this.ensureColumn("clients", "reactivation_note", "TEXT");
+    this.ensureColumn("clients", "reactivation_decided_at", "TEXT");
     this.ensureColumn("quotation_items", "brand", "TEXT");
     this.ensureColumn("products", "pack_size", "INTEGER");
     this.ensureColumn("price_table_items", "pack_size", "INTEGER");
@@ -522,6 +526,31 @@ class LocalDatabase {
       "SELECT * FROM purchases WHERE client_id = ? ORDER BY purchased_at DESC",
       [clientId],
     );
+  }
+
+  /**
+   * Records the reconquista decision the equipe marked on the planilha. Like
+   * the Receita status, it is written apart from saveClient so it can never
+   * overwrite the cadastro the user maintains.
+   */
+  setReactivationDecisions(rows) {
+    const now = new Date().toISOString();
+    let updated = 0;
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const id = String(row?.id || "");
+      const decision = String(row?.decision || "").trim().toUpperCase();
+      if (!id) continue;
+      // An empty decision clears the mark instead of leaving a stale one.
+      const note = String(row?.note || "").trim().slice(0, 500);
+      this.db.run(
+        `UPDATE clients SET reactivation_decision = ?, reactivation_note = ?, reactivation_decided_at = ?
+         WHERE id = ?`,
+        [decision || null, note || null, decision || note ? now : null, id],
+      );
+      updated += this.db.getRowsModified();
+    }
+    if (updated > 0) this.persist();
+    return updated;
   }
 
   /**

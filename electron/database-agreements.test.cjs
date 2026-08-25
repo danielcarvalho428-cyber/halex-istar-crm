@@ -454,6 +454,29 @@ test("imports the sales history and refreshes the client metrics", async () => {
   });
 });
 
+test("guarda a decisão de reconquista vinda da planilha", async () => {
+  await withDatabase((database) => {
+    database.saveClient({ id: "cli-marca", code: "700200", name: "Hospital Marcado", city: "Palmas" });
+
+    assert.equal(database.setReactivationDecisions([
+      { id: "cli-marca", decision: "sim", note: "Ligar para o Dr. Carlos" },
+      { id: "nao-existe", decision: "SIM" },
+    ]), 1);
+
+    const client = database.getClient("cli-marca");
+    assert.equal(client.reactivation_decision, "SIM");
+    assert.equal(client.reactivation_note, "Ligar para o Dr. Carlos");
+    assert.ok(client.reactivation_decided_at);
+    assert.equal(client.city, "Palmas");
+
+    // Uma nova planilha em branco limpa a marcação em vez de deixar a antiga.
+    database.setReactivationDecisions([{ id: "cli-marca", decision: "", note: "" }]);
+    const cleared = database.getClient("cli-marca");
+    assert.equal(cleared.reactivation_decision, null);
+    assert.equal(cleared.reactivation_decided_at, null);
+  });
+});
+
 test("records the Receita situação without touching the cadastro", async () => {
   await withDatabase((database) => {
     database.saveClient({

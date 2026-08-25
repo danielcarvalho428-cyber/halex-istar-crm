@@ -1,5 +1,5 @@
-import { CARTEIRA_OPTIONS } from "./crm-preview.ts";
-import { formatCnpj } from "./client-duplicates.ts";
+import { CARTEIRA_OPTIONS, type CrmClient } from "./crm-preview.ts";
+import { formatCnpj, normalizeCnpj } from "./client-duplicates.ts";
 import { isCnpjBaixado } from "./client-contact-sources.ts";
 import { SALES_SEGMENTS, type ClientSalesSummary } from "./sales-history.ts";
 
@@ -21,6 +21,9 @@ export type ReactivationExportRow = {
   cicloMedio: number | "";
   foraDoCiclo: string;
   cnpjBaixado: string;
+  /** Decisão já registrada, para a planilha voltar com o histórico. */
+  reconquistar: string;
+  observacoes: string;
 };
 
 export type ReactivationSheet = {
@@ -61,6 +64,8 @@ function toRow(summary: ClientSalesSummary): ReactivationExportRow {
     cicloMedio: summary.averageIntervalDays || "",
     foraDoCiclo: summary.overdue ? "SIM" : "",
     cnpjBaixado: isCnpjBaixado(client) ? "SIM" : "",
+    reconquistar: client.reactivationDecision || "",
+    observacoes: client.reactivationNote || "",
   };
 }
 
@@ -92,4 +97,110 @@ export function buildReactivationSheets(summaries: ClientSalesSummary[]): Reacti
       total: Number(group.reduce((sum, item) => sum + item.total, 0).toFixed(2)),
     };
   });
+}
+
+export type ReactivationMark = {
+  code: string;
+  cnpj: string;
+  name: string;
+  decision: string;
+  note: string;
+};
+
+export type MatchedMark = {
+  clientId: string;
+  clientName: string;
+  decision: string;
+  note: string;
+};
+
+function normalizeDecision(value: unknown) {
+  const text = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim()
+    .toUpperCase();
+  if (!text) return "";
+  if (text.startsWith("S")) return "SIM";
+  if (text.startsWith("N")) return "NÃO";
+  if (text.startsWith("T")) return "TALVEZ";
+  return "";
+}
+
+function headerKey(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "");
+}
+
+/**
+ * Reads back the planilha the equipe marked. Only the columns that matter are
+ * looked up by name, so reordering or hiding columns in Excel is harmless.
+ */
+export function parseReactivationMarks(matrix: Array<Array<unknown>>): ReactivationMark[] {
+  const headerIndex = matrix.findIndex((row) => row.some((cell) => headerKey(cell) === "RECONQUISTAR"));
+  if (headerIndex < 0) return [];
+
+  const headers = matrix[headerIndex].map(headerKey);
+  const columnOf = (name: string) => headers.findIndex((header) => header === name);
+  const codeAt = columnOf("CODIGO");
+  const nameAt = columnOf("CLIENTE");
+  const cnpjAt = columnOf("CNPJ");
+  const decisionAt = columnOf("RECONQUISTAR");
+  const noteAt = columnOf("OBSERVACOES");
+
+  const marks: ReactivationMark[] = [];
+  for (const row of matrix.slice(headerIndex + 1)) {
+    const decision = decisionAt >= 0 ? normalizeDecision(row[decisionAt]) : "";
+    const note = noteAt >= 0 ? String(row[noteAt] ?? "").trim() : "";
+    if (!decision && !note) continue;
+
+    marks.push({
+      code: codeAt >= 0 ? String(row[codeAt] ?? "").trim() : "",
+      cnpj: cnpjAt >= 0 ? String(row[cnpjAt] ?? "").replace(/\D/g, "") : "",
+      name: nameAt >= 0 ? String(row[nameAt] ?? "").trim() : "",
+      decision,
+      note,
+    });
+  }
+  return marks;
+}
+
+/** Ties each mark to the cadastro it belongs to, by código and then by CNPJ. */
+export function matchReactivationMarks(
+  clients: CrmClient[],
+  marks: ReactivationMark[],
+): { matched: MatchedMark[]; unmatched: ReactivationMark[] } {
+  const byCode = new Map<string, CrmClient>();
+  const byCnpj = new Map<string, CrmClient>();
+  for (const client of clients) {
+    const code = String(client.code || "").replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+    const cnpj = normalizeCnpj(client.cnpj);
+    if (code && !byCode.has(code)) byCode.set(code, client);
+    if (cnpj && !byCnpj.has(cnpj)) byCnpj.set(cnpj, client);
+  }
+
+  const matched: MatchedMark[] = [];
+  const unmatched: ReactivationMark[] = [];
+  const seen = new Set<string>();
+
+  for (const mark of marks) {
+    const code = mark.code.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+    const client = byCode.get(code) || (mark.cnpj ? byCnpj.get(mark.cnpj) : undefined);
+    if (!client || seen.has(client.id)) {
+      if (!client) unmatched.push(mark);
+      continue;
+    }
+    seen.add(client.id);
+    matched.push({
+      clientId: client.id,
+      clientName: client.name,
+      decision: mark.decision,
+      note: mark.note,
+    });
+  }
+
+  return { matched, unmatched };
 }

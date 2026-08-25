@@ -52,6 +52,8 @@ function clientFromRow(row: DesktopClient): CrmClient {
         : undefined,
     cnpj: row.cnpj || row.document || undefined,
     receitaSituacao: row.receita_situacao || undefined,
+    reactivationDecision: row.reactivation_decision || undefined,
+    reactivationNote: row.reactivation_note || undefined,
     carteira: row.carteira || undefined,
   };
 }
