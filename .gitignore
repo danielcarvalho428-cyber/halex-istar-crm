@@ -22,6 +22,12 @@
 /build
 /release
 
+# papel timbrado escolhido pelo usuário: a imagem é copiada para os dados do
+# aplicativo pela tela de Configurações, o arquivo solto na raiz é só a origem
+/MEDICONE.jpg
+/MEDICONE.png
+/papel timbrado.png
+
 # packaged desktop installers / update manifests (belong in /release, never the source tree)
 *.dmg
 *.zip
