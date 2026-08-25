@@ -306,6 +306,7 @@ function emailHistory() {
 
 const { MAILBOX_PRESETS, mergeContacts, scanMailbox } = require("./contact-mailbox.cjs");
 const { lookupCnpjs } = require("./cnpj-lookup.cjs");
+const { buildReactivationWorkbook } = require("./reactivation-workbook.cjs");
 
 /**
  * Caixas de e-mail lidas para descobrir o contato dos clientes. Versions
@@ -358,6 +359,28 @@ function registerIpc() {
     const result = database.importSalesHistory(rows);
     exportClientsSpreadsheet();
     return result;
+  });
+  ipcMain.handle("export:reactivation", async (_event, sheets) => {
+    const groups = Array.isArray(sheets) ? sheets : [];
+    if (groups.length === 0) throw new Error("Nada para exportar.");
+
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: path.join(documentsSub("Clientes"), `Reativacao-${today}.xlsx`),
+      filters: [{ name: "Planilha", extensions: ["xlsx"] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+
+    const workbook = await buildReactivationWorkbook(groups);
+    await workbook.xlsx.writeFile(result.filePath);
+    return {
+      filePath: result.filePath,
+      sheets: groups.map((group) => ({ carteira: group.carteira, clients: group.rows.length })),
+    };
+  });
+  ipcMain.handle("export:reveal", (_event, filePath) => {
+    shell.showItemInFolder(String(filePath || ""));
+    return true;
   });
   ipcMain.handle("db:sales:lastImport", () => {
     try {

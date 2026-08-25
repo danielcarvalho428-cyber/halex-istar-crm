@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld("halexDesktop", {
     setReceitaStatus: (rows) => ipcRenderer.invoke("db:clients:receita", rows),
     importSales: (rows) => ipcRenderer.invoke("db:sales:import", rows),
     lastSalesImport: () => ipcRenderer.invoke("db:sales:lastImport"),
+    exportReactivation: (sheets) => ipcRenderer.invoke("export:reactivation", sheets),
+    revealFile: (filePath) => ipcRenderer.invoke("export:reveal", filePath),
     save: (value) => ipcRenderer.invoke("db:clients:save", value),
   },
   products: {

@@ -7,6 +7,8 @@ import {
   Clipboard,
   Check,
   FilePlus2,
+  FileSpreadsheet,
+  FolderOpen,
   History,
   Phone,
   RefreshCw,
@@ -29,6 +31,7 @@ import {
   type SalesRow,
   type SalesSegment,
 } from "@/lib/sales-history";
+import { buildReactivationSheets } from "@/lib/reactivation-export";
 import { notifyCrmDataChanged, useDesktopClients } from "@/lib/use-desktop-data";
 
 const SEGMENT_TONE: Record<string, string> = {
@@ -63,6 +66,7 @@ export default function ReactivationPage() {
   const [busy, setBusy] = useState("");
   const [copied, setCopied] = useState(false);
   const [registering, setRegistering] = useState<Record<string, boolean>>({});
+  const [exported, setExported] = useState("");
 
   useEffect(() => {
     window.halexDesktop?.clients.lastSalesImport().then(setLastImport).catch(() => {});
@@ -176,6 +180,39 @@ export default function ReactivationPage() {
     }
   }
 
+  /**
+   * Exports what the filter is showing: one aba per carteira, with the column
+   * the vendedor marks SIM / NÃO / TALVEZ.
+   */
+  async function exportByCarteira() {
+    if (!window.halexDesktop) {
+      setError("A exportação em planilha está disponível no aplicativo desktop.");
+      return;
+    }
+    setBusy("export");
+    setError("");
+    setNotice("");
+    try {
+      const sheets = buildReactivationSheets(visible);
+      const saved = await window.halexDesktop.clients.exportReactivation(
+        sheets.map((sheet) => ({
+          carteira: sheet.carteira,
+          total: sheet.total,
+          rows: sheet.rows as unknown as Array<Record<string, string | number>>,
+        })),
+      );
+      if (!saved) return;
+      setExported(saved.filePath);
+      setNotice(
+        `Planilha salva: ${saved.sheets.map((sheet) => `${sheet.carteira} (${sheet.clients})`).join(" · ")}.`,
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível exportar a planilha.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function copyList() {
     const text = visible
       .map((item) => [
@@ -202,6 +239,16 @@ export default function ReactivationPage() {
           Importe o relatório de vendas e veja quem está comprando, quem sumiu há três meses, seis meses ou anos. Órgão público fica de fora por padrão.
         </p>
       </header>
+
+      {exported && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+          <span className="min-w-0 truncate font-semibold">Planilha gerada em {exported}</span>
+          <button type="button" onClick={() => void window.halexDesktop?.clients.revealFile(exported)} className="brand-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-bold">
+            <FolderOpen size={14} />
+            Abrir pasta
+          </button>
+        </div>
+      )}
 
       {(error || notice) && (
         <div className={`rounded-lg border p-3 text-sm font-semibold ${error ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
@@ -277,6 +324,10 @@ export default function ReactivationPage() {
                 <button type="button" onClick={() => void copyList()} className="brand-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-bold">
                   {copied ? <Check size={14} /> : <Clipboard size={14} />}
                   {copied ? "Copiado" : "Copiar lista"}
+                </button>
+                <button type="button" disabled={busy !== "" || visible.length === 0} onClick={() => void exportByCarteira()} className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold disabled:opacity-40">
+                  {busy === "export" ? <RefreshCw className="animate-spin" size={14} /> : <FileSpreadsheet size={14} />}
+                  Exportar por carteira
                 </button>
               </div>
             </div>

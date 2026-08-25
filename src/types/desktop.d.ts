@@ -89,6 +89,15 @@ interface HalexDesktopApi {
       document: string;
       value: number;
     }>): Promise<{ clients: number; purchases: number; unmatched: number }>;
+    exportReactivation(sheets: Array<{
+      carteira: string;
+      total: number;
+      rows: Array<Record<string, string | number>>;
+    }>): Promise<{
+      filePath: string;
+      sheets: Array<{ carteira: string; clients: number }>;
+    } | null>;
+    revealFile(filePath: string): Promise<boolean>;
     lastSalesImport(): Promise<{
       importedAt: string;
       clients: number;
