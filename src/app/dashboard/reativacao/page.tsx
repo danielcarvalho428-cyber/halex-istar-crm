@@ -119,7 +119,7 @@ export default function ReactivationPage() {
 
       const parsed = parseSalesMatrix(matrix);
       if (parsed.rows.length === 0) {
-        throw new Error("Não encontrei colunas de data e cliente no relatório. Confira se o arquivo tem cabeçalho.");
+        throw new Error("Não reconheci o formato do relatório: não achei data, cliente nem valor. Se for um export novo, me mande o arquivo.");
       }
       setRows(parsed.rows);
       setFileName(file.name);
@@ -136,9 +136,10 @@ export default function ReactivationPage() {
         })));
         setLastImport({ importedAt: new Date().toISOString(), ...saved });
         notifyCrmDataChanged();
+        const faturamento = parsed.rows.reduce((sum, row) => sum + row.value, 0);
         setNotice(
-          `${parsed.rows.length} linha(s) lidas · ${saved.purchases} compra(s) gravadas em ${saved.clients} cliente(s)`
-          + `${saved.unmatched ? ` · ${saved.unmatched} linha(s) de clientes fora do cadastro` : ""}.`,
+          `${parsed.rows.length} nota(s) lidas somando ${money(faturamento)} · ${saved.purchases} compra(s) gravadas em ${saved.clients} cliente(s)`
+          + `${saved.unmatched ? ` · ${saved.unmatched} nota(s) de clientes fora do cadastro` : ""}.`,
         );
       } else {
         setNotice(`${parsed.rows.length} linha(s) lidas. A gravação do histórico está disponível no aplicativo desktop.`);

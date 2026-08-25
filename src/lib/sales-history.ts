@@ -117,13 +117,88 @@ export function parseSalesDate(value: unknown): string {
   return "";
 }
 
+/**
+ * O relatório detalhado da Halex não é uma tabela plana: cada NF tem uma linha
+ * de cabeçalho, uma de dados e, abaixo, os itens — e é no item que está o
+ * valor ("Total Item (R$)"). Ler só o cabeçalho traz a nota sem dinheiro
+ * nenhum, que foi exatamente o que acontecia.
+ */
+export function parseHalexDetailedMatrix(matrix: SalesMatrixRow[]): SalesRow[] {
+  const rows: SalesRow[] = [];
+
+  for (let index = 0; index < matrix.length; index += 1) {
+    const header = matrix[index] || [];
+    const isInvoiceHeader = normalizeHeader(header[0]) === "LANCAMENTO"
+      && normalizeHeader(header[4]) === "NF";
+    if (!isInvoiceHeader) continue;
+
+    const metadata = matrix[index + 1] || [];
+    // A data de faturamento é a que conta; o lançamento cobre a nota que ainda
+    // não faturou no mesmo dia.
+    const date = parseSalesDate(metadata[1]) || parseSalesDate(metadata[0]);
+    const clientCode = String(metadata[5] ?? "").trim();
+    if (!date || !clientCode) continue;
+
+    let itemHeader = -1;
+    for (let cursor = index + 2; cursor < Math.min(index + 8, matrix.length); cursor += 1) {
+      if (normalizeHeader((matrix[cursor] || [])[0]) === "CODPRODUTO") {
+        itemHeader = cursor;
+        break;
+      }
+    }
+    if (itemHeader < 0) continue;
+
+    let items = 0;
+    let cursor = itemHeader + 1;
+    for (; cursor < matrix.length; cursor += 1) {
+      const item = matrix[cursor] || [];
+      const first = normalizeHeader(item[0]);
+      if (first.startsWith("TOTALNF") || first === "LANCAMENTO") break;
+      if (!String(item[0] ?? "").trim()) continue;
+      items += parseSalesNumber(item[5]);
+    }
+
+    // O rodapé "TOTAL NF (R$)" é o valor oficial da nota. A coluna de item
+    // vem com fator de mil em parte do relatório (preço 5,10 gravado como
+    // 5100), então somar item por item inflaria o faturamento.
+    const footer = String((matrix[cursor] || [])[0] ?? "");
+    const declared = normalizeHeader(footer).startsWith("TOTALNF")
+      ? parseSalesNumber(footer.replace(/^[^\d-]*/, ""))
+      : 0;
+    const total = declared || items;
+
+    const name = String(metadata[6] ?? "").trim();
+    rows.push({
+      clientCode,
+      // "502957 - HOSP. EVANGELICO" traz o código colado no nome.
+      clientName: name.replace(/^\s*\d+\s*-\s*/, ""),
+      cnpj: "",
+      date,
+      document: String(metadata[4] ?? "").trim().replace(/^0+(?=\d)/, ""),
+      value: Number(total.toFixed(2)),
+    });
+    index = cursor - 1;
+  }
+
+  return rows;
+}
+
 /** Reads the whole sheet, skipping anything that is not a real sale. */
 export function parseSalesMatrix(matrix: SalesMatrixRow[], mapping?: SalesColumnMap) {
+  // O relatório detalhado tem prioridade: nele o cabeçalho plano existe, mas
+  // não carrega valor nenhum.
+  if (!mapping) {
+    const detailed = parseHalexDetailedMatrix(matrix);
+    if (detailed.length > 0) return { rows: detailed, mapping: null, ignored: 0, layout: "detalhado" as const };
+  }
+
   const headerIndex = matrix.findIndex((row) => {
     const columns = detectColumns(row);
     return columns.date >= 0 && (columns.clientCode >= 0 || columns.cnpj >= 0 || columns.clientName >= 0);
   });
-  if (headerIndex < 0 && !mapping) return { rows: [], mapping: null, ignored: matrix.length };
+  if (headerIndex < 0 && !mapping) {
+    return { rows: [], mapping: null, ignored: matrix.length, layout: "desconhecido" as const };
+  }
 
   const columns = mapping || detectColumns(matrix[headerIndex]);
   const rows: SalesRow[] = [];
@@ -149,7 +224,7 @@ export function parseSalesMatrix(matrix: SalesMatrixRow[], mapping?: SalesColumn
     });
   }
 
-  return { rows, mapping: columns, ignored };
+  return { rows, mapping: columns, ignored, layout: "tabela" as const };
 }
 
 export const SALES_SEGMENTS = [

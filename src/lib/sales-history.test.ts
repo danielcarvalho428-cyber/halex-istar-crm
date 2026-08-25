@@ -4,6 +4,7 @@ import {
   countBySegment,
   detectColumns,
   parseSalesDate,
+  parseHalexDetailedMatrix,
   parseSalesMatrix,
   parseSalesNumber,
   segmentFor,
@@ -186,4 +187,64 @@ test("matches by CNPJ before calling a client unknown", () => {
     [sale({ clientCode: "999999", cnpj: "06134926000156", date: "2026-01-01" })],
   );
   assert.deepEqual(unknown, []);
+});
+
+const detailedReport = [
+  ["", "", "", "RELAÇÃO DE NOTAS FISCAIS", "", "", "", "", "", "", ""],
+  ["PERÍODO DE 01/01/2016 À 25/08/2026", "", "Tipo de Venda: 1", "", "", "", "", "", "", "", ""],
+  ["Lançamento", "Faturamento", "Unidade", "Ordem Venda SAP", "NF", "Código Cliente", "Nome Cliente", "Tipo Frete", "Cond. Pgto", "Status", "Pedido Cliente"],
+  ["18/04/2019", "22/04/2019", "BP01 - Matriz Goiânia", "0000278439", "000301708", 502957, "502957 - HOSP. EVANGELICO DE RIO VERDE", "CIF", "28 DIAS", "Faturado Total", ""],
+  ["", "", "", "", "", "", "", "", "", "", ""],
+  ["Cód. Produto", "Desc. Produto", "Qtd. Caixas", "Qtd. Unidades", "Preço Proposto (R$)", "Total Item (R$)", "", "", "", "", ""],
+  [4914, "SALINA BALANCEADA SF 250 ML", 1, 50, 23, 1150, "", "", "", "", ""],
+  ["", "", "", "", "", "", "", "", "", "", ""],
+  ["TOTAL NF (R$): R$ 1.150,00", "", "", "", "", "", "", "", "", "", ""],
+  ["", "", "", "", "", "", "", "", "", "", ""],
+  ["Lançamento", "Faturamento", "Unidade", "Ordem Venda SAP", "NF", "Código Cliente", "Nome Cliente", "Tipo Frete", "Cond. Pgto", "Status", "Pedido Cliente"],
+  ["23/04/2019", "24/04/2019", "BP01 - Matriz Goiânia", "0000278606", "000301818", 502615, "502615 - HOSP. SAO LUCAS", "CIF", "30/60 Dias", "Faturado Total", ""],
+  ["Cód. Produto", "Desc. Produto", "Qtd. Caixas", "Qtd. Unidades", "Preço Proposto (R$)", "Total Item (R$)", "", "", "", "", ""],
+  // O relatório grava parte dos valores com fator de mil: 5100 é R$ 5,10 e o
+  // total do item sai como 51102000 em vez de R$ 51.102,00.
+  [4131, "CLORETO DE SODIO 0,9% SF 500 ML", 334, 10020, 5100, 51102000, "", "", "", "", ""],
+  ["TOTAL NF (R$): R$ 51.102,00", "", "", "", "", "", "", "", "", "", ""],
+];
+
+test("lê o relatório detalhado, onde o valor está abaixo do cabeçalho da nota", () => {
+  const rows = parseHalexDetailedMatrix(detailedReport);
+
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows[0], {
+    clientCode: "502957",
+    // O nome vem com o código colado e sai limpo.
+    clientName: "HOSP. EVANGELICO DE RIO VERDE",
+    cnpj: "",
+    date: "2019-04-22",
+    document: "301708",
+    value: 1150,
+  });
+});
+
+test("usa o TOTAL NF em vez da soma dos itens, que vem com fator de mil", () => {
+  const [, segunda] = parseHalexDetailedMatrix(detailedReport);
+  assert.equal(segunda.value, 51102);
+  assert.equal(segunda.date, "2019-04-24");
+});
+
+test("reconhece o relatório detalhado sozinho, sem cair na leitura de tabela", () => {
+  const result = parseSalesMatrix(detailedReport);
+  assert.equal(result.layout, "detalhado");
+  assert.equal(result.rows.length, 2);
+  assert.equal(result.rows.reduce((sum, row) => sum + row.value, 0), 52252);
+});
+
+test("sem rodapé TOTAL NF, a soma dos itens vale como valor da nota", () => {
+  const rows = parseHalexDetailedMatrix([
+    ["Lançamento", "Faturamento", "Unidade", "Ordem Venda SAP", "NF", "Código Cliente", "Nome Cliente"],
+    ["18/04/2019", "22/04/2019", "BP01", "0000278439", "000301708", 502957, "502957 - HOSPITAL"],
+    ["Cód. Produto", "Desc. Produto", "Qtd. Caixas", "Qtd. Unidades", "Preço Proposto (R$)", "Total Item (R$)"],
+    [4914, "SALINA", 1, 50, 23, 1150],
+    [4124, "CLORETO", 2, 100, 2.5, 250],
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].value, 1400);
 });
