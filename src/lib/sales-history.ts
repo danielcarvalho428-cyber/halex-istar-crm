@@ -133,9 +133,10 @@ export function parseHalexDetailedMatrix(matrix: SalesMatrixRow[]): SalesRow[] {
     if (!isInvoiceHeader) continue;
 
     const metadata = matrix[index + 1] || [];
-    // A data de faturamento é a que conta; o lançamento cobre a nota que ainda
-    // não faturou no mesmo dia.
-    const date = parseSalesDate(metadata[1]) || parseSalesDate(metadata[0]);
+    // O que diz se o cliente comprou é a data do pedido (lançamento), não a da
+    // nota: um pedido faturado em parcelas gera notas meses depois e faria o
+    // cliente parecer ativo em um ano em que não pediu nada.
+    const date = parseSalesDate(metadata[0]) || parseSalesDate(metadata[1]);
     const clientCode = String(metadata[5] ?? "").trim();
     if (!date || !clientCode) continue;
 

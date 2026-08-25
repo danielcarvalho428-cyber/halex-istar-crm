@@ -441,7 +441,7 @@ export default function ReactivationPage() {
 
                     <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4 xl:grid-cols-2">
                       <div>
-                        <dt className="text-stone-400">Última compra</dt>
+                        <dt className="text-stone-400">Último pedido</dt>
                         <dd className="mt-0.5 font-bold">
                           {summary.lastPurchase ? appDate(summary.lastPurchase) : "—"}
                           {summary.orders > 0 && Number.isFinite(summary.daysSinceLast) && (
@@ -551,7 +551,8 @@ export default function ReactivationPage() {
           <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs">
             <li>Baixe o relatório de vendas do período que quiser analisar — quanto maior, melhor a leitura do ciclo de cada cliente.</li>
             <li>Selecione o arquivo acima. As colunas de data, cliente e valor são reconhecidas automaticamente.</li>
-            <li>O histórico é gravado no cadastro: última compra, ciclo médio e previsão passam a alimentar a agenda e o painel.</li>
+            <li>O histórico é gravado no cadastro: último pedido, ciclo médio e previsão passam a alimentar a agenda e o painel.</li>
+            <li>A data considerada é a do <strong>lançamento do pedido</strong>, não a do faturamento: um pedido faturado em parcelas gera notas meses depois e faria o cliente parecer ativo sem ter pedido nada.</li>
           </ol>
           <p className="mt-3 flex items-start gap-2 text-xs">
             <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-700" />

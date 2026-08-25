@@ -218,7 +218,8 @@ test("lê o relatório detalhado, onde o valor está abaixo do cabeçalho da not
     // O nome vem com o código colado e sai limpo.
     clientName: "HOSP. EVANGELICO DE RIO VERDE",
     cnpj: "",
-    date: "2019-04-22",
+    // Vale a data do pedido (18/04), não a do faturamento (22/04).
+    date: "2019-04-18",
     document: "301708",
     value: 1150,
   });
@@ -227,7 +228,7 @@ test("lê o relatório detalhado, onde o valor está abaixo do cabeçalho da not
 test("usa o TOTAL NF em vez da soma dos itens, que vem com fator de mil", () => {
   const [, segunda] = parseHalexDetailedMatrix(detailedReport);
   assert.equal(segunda.value, 51102);
-  assert.equal(segunda.date, "2019-04-24");
+  assert.equal(segunda.date, "2019-04-23");
 });
 
 test("reconhece o relatório detalhado sozinho, sem cair na leitura de tabela", () => {
@@ -247,4 +248,30 @@ test("sem rodapé TOTAL NF, a soma dos itens vale como valor da nota", () => {
   ]);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].value, 1400);
+});
+
+test("usa a data do pedido mesmo quando a nota sai meses depois", () => {
+  // Caso real: um pedido de 19/11/2025 faturado em parcelas até 21/01/2026
+  // fazia o cliente parecer que comprou em 2026.
+  const rows = parseHalexDetailedMatrix([
+    ["Lançamento", "Faturamento", "Unidade", "Ordem Venda SAP", "NF", "Código Cliente", "Nome Cliente"],
+    ["19/11/2025", "21/01/2026", "BP01", "0000461902", "000100383", 507940, "507940 - ASTRA FARMA"],
+    ["Cód. Produto", "Desc. Produto", "Qtd. Caixas", "Qtd. Unidades", "Preço Proposto (R$)", "Total Item (R$)"],
+    [4131, "CLORETO", 10, 300, 3.08, 924],
+    ["TOTAL NF (R$): R$ 924,00"],
+  ]);
+
+  assert.equal(rows[0].date, "2025-11-19");
+});
+
+test("sem data de lançamento, o faturamento ainda vale", () => {
+  const rows = parseHalexDetailedMatrix([
+    ["Lançamento", "Faturamento", "Unidade", "Ordem Venda SAP", "NF", "Código Cliente", "Nome Cliente"],
+    ["", "21/01/2026", "BP01", "0000461902", "000100383", 507940, "507940 - ASTRA FARMA"],
+    ["Cód. Produto", "Desc. Produto", "Qtd. Caixas", "Qtd. Unidades", "Preço Proposto (R$)", "Total Item (R$)"],
+    [4131, "CLORETO", 10, 300, 3.08, 924],
+    ["TOTAL NF (R$): R$ 924,00"],
+  ]);
+
+  assert.equal(rows[0].date, "2026-01-21");
 });
