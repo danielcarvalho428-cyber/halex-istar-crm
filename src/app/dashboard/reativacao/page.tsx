@@ -13,6 +13,7 @@ import {
   Search,
   TrendingDown,
   UploadCloud,
+  UserPlus,
 } from "lucide-react";
 import { appDate, money } from "@/lib/crm-preview";
 import { localIsoDate } from "@/lib/date";
@@ -23,6 +24,7 @@ import {
   parseSalesMatrix,
   SALES_SEGMENTS,
   summarizeClientSales,
+  unknownSalesClients,
   type SalesMatrixRow,
   type SalesRow,
   type SalesSegment,
@@ -60,6 +62,7 @@ export default function ReactivationPage() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState("");
   const [copied, setCopied] = useState(false);
+  const [registering, setRegistering] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     window.halexDesktop?.clients.lastSalesImport().then(setLastImport).catch(() => {});
@@ -71,6 +74,9 @@ export default function ReactivationPage() {
     [clients, rows, today, includeOrgaoPublico],
   );
   const counts = useMemo(() => countBySegment(summaries), [summaries]);
+  const unknown = useMemo(() => unknownSalesClients(clients, rows), [clients, rows]);
+  const isRegistering = (key: string) => registering[key] ?? true;
+  const selectedUnknown = unknown.filter((item) => isRegistering(item.code || item.cnpj || item.name));
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -130,6 +136,43 @@ export default function ReactivationPage() {
     } finally {
       setBusy("");
       if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  /**
+   * Creates the cadastro of the clients that only existed in the relatório and
+   * re-imports, so their purchase history lands on the new cadastros.
+   */
+  async function registerUnknown() {
+    if (!window.halexDesktop || selectedUnknown.length === 0) return;
+    setBusy("register");
+    setError("");
+    try {
+      let created = 0;
+      for (const item of selectedUnknown) {
+        if (!item.name) continue;
+        await window.halexDesktop.clients.save({
+          code: item.code,
+          name: item.name,
+          document: item.cnpj || undefined,
+          status: "active",
+        });
+        created += 1;
+      }
+      const saved = await window.halexDesktop.clients.importSales(rows.map((row) => ({
+        clientCode: row.clientCode,
+        cnpj: row.cnpj,
+        date: row.date,
+        document: row.document,
+        value: row.value,
+      })));
+      setLastImport({ importedAt: new Date().toISOString(), ...saved });
+      notifyCrmDataChanged();
+      setNotice(`${created} cliente(s) cadastrado(s) e histórico revinculado · ${saved.unmatched} linha(s) ainda fora do cadastro.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível cadastrar os clientes.");
+    } finally {
+      setBusy("");
     }
   }
 
@@ -318,6 +361,57 @@ export default function ReactivationPage() {
             )}
           </section>
         </>
+      )}
+
+      {unknown.length > 0 && (
+        <section className="glass-card overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 p-4">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold">
+                <AlertTriangle size={17} className="text-amber-700" />
+                Compraram, mas não estão no cadastro
+              </h2>
+              <p className="mt-1 text-xs text-stone-500">
+                {unknown.length} cliente(s) do relatório sem cadastro na carteira, somando {money(unknown.reduce((sum, item) => sum + item.total, 0))}. Cadastre para que entrem na análise e no acompanhamento.
+              </p>
+            </div>
+            <button type="button" disabled={busy !== "" || selectedUnknown.length === 0} onClick={() => void registerUnknown()} className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold disabled:opacity-40">
+              {busy === "register" ? <RefreshCw className="animate-spin" size={14} /> : <UserPlus size={14} />}
+              Cadastrar {selectedUnknown.length} cliente(s)
+            </button>
+          </div>
+          <ul className="max-h-96 divide-y divide-stone-100 overflow-y-auto">
+            {unknown.slice(0, 200).map((item) => {
+              const key = item.code || item.cnpj || item.name;
+              return (
+                <li key={key} className="p-3 text-xs">
+                  <label className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={isRegistering(key)}
+                      disabled={!item.name}
+                      onChange={(event) => setRegistering((current) => ({ ...current, [key]: event.target.checked }))}
+                      aria-label={`Cadastrar ${item.name || item.code}`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold">{item.name || `Cliente ${item.code || item.cnpj}`}</span>
+                      <span className="mt-0.5 block text-stone-500">
+                        Código {item.code || "—"}
+                        {item.cnpj ? ` · CNPJ ${item.cnpj}` : ""}
+                        {" · "}{item.orders} compra(s) · {money(item.total)} · última em {appDate(item.lastPurchase)}
+                        {!item.name ? " · sem nome no relatório, cadastre manualmente" : ""}
+                      </span>
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+          {unknown.length > 200 && (
+            <p className="border-t border-stone-200 p-3 text-center text-xs text-stone-500">Mostrando 200 de {unknown.length}.</p>
+          )}
+        </section>
       )}
 
       {rows.length === 0 && (

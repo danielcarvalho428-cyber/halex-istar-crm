@@ -278,3 +278,53 @@ export function countBySegment(summaries: ClientSalesSummary[]) {
   }
   return counts;
 }
+
+export type UnknownSalesClient = {
+  /** Código as it appears in the relatório, trimmed of leading zeros. */
+  code: string;
+  cnpj: string;
+  name: string;
+  orders: number;
+  total: number;
+  firstPurchase: string;
+  lastPurchase: string;
+};
+
+/**
+ * Clients present in the relatório but missing from the cadastro. They are
+ * often real business nobody is working — worth showing instead of dropping.
+ */
+export function unknownSalesClients(
+  clients: CrmClient[],
+  rows: SalesRow[],
+): UnknownSalesClient[] {
+  const codes = new Set<string>();
+  const cnpjs = new Set<string>();
+  for (const client of clients) {
+    const keys = clientKeys(client);
+    if (keys.code) codes.add(keys.code);
+    if (keys.cnpj) cnpjs.add(keys.cnpj);
+  }
+
+  const found = new Map<string, UnknownSalesClient>();
+  for (const row of rows) {
+    const code = row.clientCode.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+    if ((code && codes.has(code)) || (row.cnpj && cnpjs.has(row.cnpj))) continue;
+
+    const key = code || row.cnpj || row.clientName.toUpperCase();
+    if (!key) continue;
+    const current = found.get(key);
+    found.set(key, {
+      code,
+      cnpj: row.cnpj || current?.cnpj || "",
+      // The name can be blank on some linhas of the same client.
+      name: current?.name || row.clientName,
+      orders: (current?.orders || 0) + 1,
+      total: (current?.total || 0) + row.value,
+      firstPurchase: current && current.firstPurchase < row.date ? current.firstPurchase : row.date,
+      lastPurchase: current && current.lastPurchase > row.date ? current.lastPurchase : row.date,
+    });
+  }
+
+  return [...found.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+}

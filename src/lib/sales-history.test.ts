@@ -8,6 +8,7 @@ import {
   parseSalesNumber,
   segmentFor,
   summarizeClientSales,
+  unknownSalesClients,
   type SalesRow,
 } from "./sales-history.ts";
 import type { CrmClient } from "./crm-preview.ts";
@@ -156,4 +157,33 @@ test("counts the clients of each segment for the summary strip", () => {
   assert.equal(counts.get("ativo"), 1);
   assert.equal(counts.get("frio"), 1);
   assert.equal(counts.get("sem_compra"), 1);
+});
+
+test("groups the relatório clients that are missing from the cadastro", () => {
+  const unknown = unknownSalesClients(clients, [
+    ...rows,
+    sale({ clientCode: "800100", clientName: "HOSPITAL NOVO", date: "2024-05-01", value: 7000 }),
+    sale({ clientCode: "0800100", clientName: "", date: "2026-01-15", value: 3000 }),
+    sale({ clientCode: "800200", clientName: "CLINICA DESCONHECIDA", cnpj: "06134926000156", date: "2025-03-02", value: 500 }),
+  ]);
+
+  // The two linhas of 800100 are one client, so two unknown clients in all.
+  assert.equal(unknown.length, 2);
+  const novo = unknown.find((item) => item.code === "800100")!;
+  assert.equal(novo.name, "HOSPITAL NOVO");
+  assert.equal(novo.orders, 2);
+  assert.equal(novo.total, 10000);
+  assert.equal(novo.firstPurchase, "2024-05-01");
+  assert.equal(novo.lastPurchase, "2026-01-15");
+
+  // Whoever is already in the cadastro never shows up here.
+  assert.ok(!unknown.some((item) => item.code === "500024"));
+});
+
+test("matches by CNPJ before calling a client unknown", () => {
+  const unknown = unknownSalesClients(
+    [client({ id: "a", name: "HOSPITAL", code: "", cnpj: "06.134.926/0001-56" })],
+    [sale({ clientCode: "999999", cnpj: "06134926000156", date: "2026-01-01" })],
+  );
+  assert.deepEqual(unknown, []);
 });
