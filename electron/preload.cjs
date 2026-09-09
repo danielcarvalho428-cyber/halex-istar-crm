@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("halexDesktop", {
   products: {
     list: () => ipcRenderer.invoke("db:products:list"),
     save: (value) => ipcRenderer.invoke("db:products:save", value),
+    setPackSize: (code, packSize) =>
+      ipcRenderer.invoke("db:products:pack-size", code, packSize),
   },
   quotations: {
     list: () => ipcRenderer.invoke("db:quotations:list"),

@@ -190,8 +190,18 @@ class LocalDatabase {
     this.ensureColumn("quotations", "minimum_billing", "REAL");
     this.ensureColumn("agreement_groups", "price_table_name", "TEXT");
     this.ensureColumn("agreement_groups", "price_table_imported_at", "TEXT");
+    // Correções manuais de embalagem feitas na tela de produtos. Ficam fora da
+    // tabela de produtos para sobreviverem a cada nova importação.
+    this.db.run(
+      `CREATE TABLE IF NOT EXISTS product_pack_overrides (
+        code TEXT PRIMARY KEY,
+        pack_size INTEGER NOT NULL,
+        updated_at TEXT
+      )`,
+    );
     this.cleanupFalseManualPurchaseDates();
     this.repairKnownProductData();
+    this.applyPackSizeOverrides();
     this.reconcileActiveTable();
     this.reactivateMediconeProducts();
     if (this.seedDemoData) this.seed();
@@ -208,6 +218,56 @@ class LocalDatabase {
     this.db.run(
       "UPDATE price_table_items SET pack_size = 100 WHERE code = '40000389' AND COALESCE(pack_size, 0) <> 100",
     );
+  }
+
+  // Reaplica as embalagens corrigidas à mão sobre o que veio da planilha.
+  applyPackSizeOverrides() {
+    const now = new Date().toISOString();
+    this.db.run(
+      `UPDATE products SET pack_size = (
+         SELECT pack_size FROM product_pack_overrides o WHERE o.code = products.code
+       ), updated_at = ?
+       WHERE code IN (SELECT code FROM product_pack_overrides)
+         AND COALESCE(pack_size, 0) <> (
+           SELECT pack_size FROM product_pack_overrides o WHERE o.code = products.code
+         )`,
+      [now],
+    );
+    this.db.run(
+      `UPDATE price_table_items SET pack_size = (
+         SELECT pack_size FROM product_pack_overrides o WHERE o.code = price_table_items.code
+       )
+       WHERE code IN (SELECT code FROM product_pack_overrides)`,
+    );
+  }
+
+  // Corrige a quantidade da caixa de um produto e guarda a correção.
+  setProductPackSize(code, packSize) {
+    const value = Math.trunc(Number(packSize));
+    if (!code) throw new Error("Produto sem código.");
+    if (!Number.isFinite(value) || value < 1) {
+      throw new Error("Quantidade da caixa inválida.");
+    }
+    const now = new Date().toISOString();
+    this.db.run(
+      `INSERT INTO product_pack_overrides(code, pack_size, updated_at) VALUES(?,?,?)
+       ON CONFLICT(code) DO UPDATE SET pack_size=excluded.pack_size, updated_at=excluded.updated_at`,
+      [String(code), value, now],
+    );
+    this.applyPackSizeOverrides();
+    this.persist();
+    return value;
+  }
+
+  // Volta a embalagem para o que a planilha importada diz.
+  clearProductPackSizeOverride(code) {
+    this.db.run("DELETE FROM product_pack_overrides WHERE code = ?", [String(code)]);
+    this.persist();
+    return true;
+  }
+
+  listProductPackSizeOverrides() {
+    return this.rows("SELECT * FROM product_pack_overrides ORDER BY code");
   }
 
   // When a commercial (sales) table is active it is the single price source, so
@@ -805,6 +865,7 @@ class LocalDatabase {
         [imported, versionId],
       );
       this.db.run("COMMIT");
+      this.applyPackSizeOverrides();
       this.persist();
       return { versionId, imported, ignored, total: rows.length };
     } catch (error) {
@@ -867,6 +928,7 @@ class LocalDatabase {
         [settingKey, JSON.stringify(storedTable)],
       );
       this.db.run("COMMIT");
+      this.applyPackSizeOverrides();
       this.persist();
       return {
         imported: table.products.length,
@@ -940,6 +1002,7 @@ class LocalDatabase {
         [JSON.stringify(storedTable)],
       );
       this.db.run("COMMIT");
+      this.applyPackSizeOverrides();
       this.persist();
       return {
         imported: table.products.length,
@@ -997,6 +1060,7 @@ class LocalDatabase {
         );
       }
       this.db.run("COMMIT");
+      this.applyPackSizeOverrides();
       this.persist();
       return rows.length;
     } catch (error) {

@@ -402,6 +402,9 @@ function registerIpc() {
   ipcMain.handle("db:products:save", (_event, value) =>
     database.saveProduct(value),
   );
+  ipcMain.handle("db:products:pack-size", (_event, code, packSize) =>
+    database.setProductPackSize(code, packSize),
+  );
   ipcMain.handle("db:quotations:list", () => database.listQuotations());
   ipcMain.handle("db:quotations:get", (_event, id) => database.getQuotation(id));
   ipcMain.handle("db:quotations:delete", (_event, id) => database.deleteQuotation(id));

@@ -132,6 +132,7 @@ interface HalexDesktopApi {
   products: {
     list(): Promise<DesktopProduct[]>;
     save(value: DesktopProduct): Promise<string>;
+    setPackSize(code: string, packSize: number): Promise<number>;
   };
   quotations: {
     list(): Promise<DesktopQuotation[]>;
