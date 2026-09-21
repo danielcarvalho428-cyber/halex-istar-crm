@@ -153,7 +153,9 @@ export default function ClientEmailsPage() {
       setAccepted({});
       setScanNote(
         `${result.contacts.length} endereço(s) em ${result.messages} mensagem(ns) desde ${result.since}. `
-        + result.mailboxes.map((box) => `${box.email}: ${box.contacts}`).join(" · ")
+        + result.mailboxes.map((box) => `${box.email}: ${box.contacts} em ${box.folders.length} pasta(s)`).join(" · ")
+        // Saber que a caixa é maior que a rodada explica um cliente que não apareceu.
+        + (result.skipped ? ` — ${result.skipped} mensagem(ns) além do teto desta rodada; reduza os meses para varrer o resto.` : "")
         + (result.failures.length
           ? ` — falharam: ${result.failures.map((box) => `${box.email} (${box.reason})`).join(" · ")}`
           : ""),

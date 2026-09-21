@@ -76,7 +76,8 @@ test("reports 100% billing and lists every item in the email", () => {
   assert.equal(suggestBillingTemplate(reconciliation), "integral");
 
   const email = buildInvoiceEmail(nota, reconciliation);
-  assert.match(email.subject, /^Nota fiscal 12345 · Pedido 655693461$/);
+  // A marca vem na frente do assunto para o cliente reconhecer o remetente.
+  assert.match(email.subject, /^Halex Istar · Nota fiscal 12345 · Pedido 655693461$/);
   assert.match(email.body, /004124 — Produto A: 100 un/);
   assert.match(email.body, /40000135 — Produto B: 50 un/);
   assert.match(email.body, /O pedido 655693461 foi atendido integralmente\./);
@@ -91,7 +92,7 @@ test("lists the pending balance when the pedido is only partially billed", () =>
   assert.equal(suggestBillingTemplate(reconciliation), "parcial");
 
   const email = buildInvoiceEmail(nota, reconciliation);
-  assert.match(email.subject, /faturado parcialmente/);
+  assert.match(email.subject, /^Halex Istar · .*faturado parcialmente/);
   assert.match(email.body, /Itens faturados nesta nota fiscal:/);
   assert.match(email.body, /Itens com saldo pendente:/);
   assert.match(email.body, /004124 — Produto A: 60 un/);
@@ -104,7 +105,7 @@ test("announces a pedido that has not been billed at all", () => {
   assert.equal(suggestBillingTemplate(reconciliation), "pendente");
 
   const email = buildInvoiceEmail(nota, reconciliation, "pendente");
-  assert.match(email.subject, /Pedido 655693461 · itens pendentes/);
+  assert.match(email.subject, /^Halex Istar · Pedido 655693461 · itens pendentes/);
   assert.match(email.body, /ainda não foi faturado/);
   assert.match(email.body, /004124 — Produto A: 100 un/);
   assert.doesNotMatch(email.body, /segue anexo/i);

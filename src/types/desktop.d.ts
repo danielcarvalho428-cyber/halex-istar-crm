@@ -274,7 +274,9 @@ interface HalexDesktopApi {
       messages: number;
       folders: string[];
       since: string;
-      mailboxes: Array<{ email: string; contacts: number; messages: number; folders: string[] }>;
+      mailboxes: Array<{ email: string; contacts: number; messages: number; folders: string[]; skipped: number }>;
+      /** Mensagens dentro do período que não couberam no teto da rodada. */
+      skipped: number;
       failures: Array<{ email: string; reason: string }>;
     }>;
     lookupCnpjs(cnpjs: string[]): Promise<{

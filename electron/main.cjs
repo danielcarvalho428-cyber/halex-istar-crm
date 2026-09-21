@@ -866,7 +866,14 @@ function registerIpc() {
         lists.push(result.contacts);
         messages += result.messages;
         since = since || result.since;
-        scanned.push({ email: box.email, contacts: result.contacts.length, messages: result.messages, folders: result.folders });
+        scanned.push({
+          email: box.email,
+          contacts: result.contacts.length,
+          messages: result.messages,
+          folders: result.folders,
+          // Mensagens que ficaram de fora do teto desta rodada.
+          skipped: (result.skippedFolders || []).reduce((total, item) => total + item.skipped, 0),
+        });
       } catch (error) {
         failures.push({ email: box.email, reason: error instanceof Error ? error.message : "falha na leitura" });
       }
@@ -882,6 +889,7 @@ function registerIpc() {
       folders: [...new Set(scanned.flatMap((item) => item.folders))],
       since,
       mailboxes: scanned,
+      skipped: scanned.reduce((total, item) => total + (item.skipped || 0), 0),
       failures,
     };
   });

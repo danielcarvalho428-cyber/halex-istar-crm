@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { aggregateContacts, MAILBOX_PRESETS, mergeContacts } = require("./contact-mailbox.cjs");
+const { aggregateContacts, foldersToScan, MAILBOX_PRESETS, mergeContacts } = require("./contact-mailbox.cjs");
 
 test("keeps one entry per address with the newest name and subject", () => {
   const contacts = aggregateContacts(
@@ -76,4 +76,51 @@ test("merges the same address seen in two caixas", () => {
   assert.equal(merged[0].messages, 8);
   assert.equal(merged[0].name, "Maria — Compras");
   assert.equal(merged[0].subject, "Pedido 900");
+});
+
+function box(path, specialUse = "", flags = []) {
+  return { path, specialUse, flags: new Set(flags) };
+}
+
+test("no Gmail varre \"Todos os e-mails\", que \u00e9 a \u00fanica pasta com o arquivado", () => {
+  const folders = foldersToScan([
+    box("INBOX"),
+    box("[Gmail]/Todos os e-mails", "\\All"),
+    box("[Gmail]/E-mails enviados", "\\Sent"),
+    box("[Gmail]/Lixeira", "\\Trash"),
+    box("[Gmail]/Spam", "\\Junk"),
+    box("[Gmail]", "", ["\\Noselect"]),
+  ]);
+
+  assert.deepEqual(folders, ["[Gmail]/Todos os e-mails"]);
+});
+
+test("sem a pasta \"todos\", varre INBOX, enviados e as pastas arquivadas", () => {
+  const folders = foldersToScan([
+    box("Arquivo"),
+    box("Clientes/Licita\u00e7\u00f5es"),
+    box("INBOX"),
+    box("Enviados", "\\Sent"),
+    box("Bulk Mail", "\\Junk"),
+    box("Rascunhos", "\\Drafts"),
+    box("Lixo", "\\Trash"),
+  ]);
+
+  assert.deepEqual(folders, ["INBOX", "Enviados", "Arquivo", "Clientes/Licita\u00e7\u00f5es"]);
+});
+
+test("colhe tamb\u00e9m o reply-to e o bcc do envelope", () => {
+  const contacts = aggregateContacts([
+    {
+      date: "2026-03-01T10:00:00Z",
+      subject: "Pedido 900",
+      from: [{ address: "portal@sistema.com.br", name: "Portal" }],
+      replyTo: [{ address: "compras@hospital.com.br", name: "Compras" }],
+      bcc: [{ address: "financeiro@hospital.com.br", name: "Financeiro" }],
+    },
+  ], "vendas@halex.com.br");
+
+  const addresses = contacts.map((item) => item.address);
+  assert.ok(addresses.includes("compras@hospital.com.br"));
+  assert.ok(addresses.includes("financeiro@hospital.com.br"));
 });

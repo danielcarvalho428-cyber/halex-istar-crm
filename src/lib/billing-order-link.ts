@@ -168,6 +168,13 @@ function itemLines(invoice: HalexInvoice) {
   );
 }
 
+/** Todo assunto sai com a marca na frente para o cliente reconhecer o remetente. */
+const EMAIL_SUBJECT_BRAND = "Halex Istar";
+
+function brandedSubject(subject: string) {
+  return `${EMAIL_SUBJECT_BRAND} · ${subject}`;
+}
+
 function pendingLines(reconciliation: InvoiceReconciliation) {
   return (reconciliation.result?.items || [])
     .filter((item) => item.missingQuantity > 0)
@@ -192,7 +199,7 @@ export function buildInvoiceEmail(
 
   if (template === "pendente") {
     return {
-      subject: orderNumber ? `Pedido ${orderNumber} · itens pendentes de faturamento` : "Itens pendentes de faturamento",
+      subject: brandedSubject(orderNumber ? `Pedido ${orderNumber} · itens pendentes de faturamento` : "Itens pendentes de faturamento"),
       body: [
         greeting,
         "",
@@ -209,7 +216,7 @@ export function buildInvoiceEmail(
 
   if (template === "parcial") {
     return {
-      subject: `Nota fiscal ${nf}${orderNumber ? ` · Pedido ${orderNumber} faturado parcialmente` : ""}`,
+      subject: brandedSubject(`Nota fiscal ${nf}${orderNumber ? ` · Pedido ${orderNumber} faturado parcialmente` : ""}`),
       body: [
         greeting,
         "",
@@ -226,7 +233,7 @@ export function buildInvoiceEmail(
   }
 
   return {
-    subject: `Nota fiscal ${nf}${orderNumber ? ` · Pedido ${orderNumber}` : ""}`,
+    subject: brandedSubject(`Nota fiscal ${nf}${orderNumber ? ` · Pedido ${orderNumber}` : ""}`),
     body: [
       greeting,
       "",

@@ -17,6 +17,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { db, type AppDataBundle } from "@/lib/db";
+import { notifyCrmDataChanged, useDesktopClients } from "@/lib/use-desktop-data";
 import { parseBillingReportOcr } from "@/lib/billing-report-pdf";
 import {
   normalizeHalexDocument,
@@ -66,6 +67,7 @@ function shortDate(value: string) {
 
 export default function BillingFollowUpPage() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const clients = useDesktopClients();
   const [records, setRecords] = useState<HalexInvoice[]>([]);
   const [fileName, setFileName] = useState("");
   const [documents, setDocuments] = useState<DanfeDocument[]>([]);
@@ -88,6 +90,15 @@ export default function BillingFollowUpPage() {
 
   const emailByClient = useMemo(() => {
     const map = new Map<string, string>();
+    // O cadastro do cliente vem primeiro: é lá que o e-mail digitado aqui fica
+    // guardado, então ele precisa vencer o que veio das licitações.
+    for (const client of clients) {
+      if (!client.email?.trim()) continue;
+      const code = invoiceNumber(client.code || "");
+      if (code && !map.has(code)) map.set(code, client.email.trim());
+      const name = clientKey(client.name || "");
+      if (name && !map.has(`NAME:${name}`)) map.set(`NAME:${name}`, client.email.trim());
+    }
     for (const item of appData?.licitacoes || []) {
       const code = invoiceNumber(item.codigo_cliente || "");
       if (code && item.orgao_email && !map.has(code)) map.set(code, item.orgao_email);
@@ -95,7 +106,19 @@ export default function BillingFollowUpPage() {
       if (name && item.orgao_email && !map.has(`NAME:${name}`)) map.set(`NAME:${name}`, item.orgao_email);
     }
     return map;
-  }, [appData]);
+  }, [appData, clients]);
+
+  /** O cliente do cadastro que corresponde à NF, pelo código e depois pelo nome. */
+  const clientByInvoice = useMemo(() => {
+    const map = new Map<string, (typeof clients)[number]>();
+    for (const client of clients) {
+      const code = invoiceNumber(client.code || "");
+      if (code && !map.has(code)) map.set(code, client);
+      const name = clientKey(client.name || "");
+      if (name && !map.has(`NAME:${name}`)) map.set(`NAME:${name}`, client);
+    }
+    return map;
+  }, [clients]);
 
   const clientOrders = useMemo(
     () => buildClientOrders(
@@ -241,6 +264,32 @@ export default function BillingFollowUpPage() {
     }
   }
 
+  /**
+   * Guarda no cadastro o e-mail digitado aqui, para não ser preenchido de novo
+   * na próxima nota fiscal do mesmo cliente.
+   */
+  async function rememberClientEmail(record: HalexInvoice, address: string) {
+    const email = address.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    if (!window.halexDesktop?.clients) return;
+
+    const client = clientByInvoice.get(invoiceNumber(record.codigoCliente))
+      || clientByInvoice.get(`NAME:${clientKey(record.nomeCliente)}`);
+    if (!client || client.email?.trim().toLowerCase() === email.toLowerCase()) return;
+
+    try {
+      // saveClient regrava a linha inteira, então o registro volta com apenas
+      // o e-mail trocado.
+      const stored = await window.halexDesktop.clients.get(client.id);
+      if (!stored) return;
+      await window.halexDesktop.clients.save({ ...stored, email });
+      notifyCrmDataChanged();
+      setNotice(`E-mail ${email} salvo no cadastro de ${client.name}.`);
+    } catch {
+      // Um cadastro que não aceitou a gravação não pode impedir o envio.
+    }
+  }
+
   async function sendEmail(record: HalexInvoice) {
     const draft = draftFor(record);
     const document = documentByInvoice.get(invoiceNumber(record.nf));
@@ -258,6 +307,7 @@ export default function BillingFollowUpPage() {
       });
       setHistory((current) => [sent, ...current]);
       setNotice(`E-mail da NF ${invoiceNumber(record.nf)} enviado para ${draft.to}.`);
+      await rememberClientEmail(record, draft.to);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "O envio falhou.");
     } finally {
@@ -368,8 +418,8 @@ export default function BillingFollowUpPage() {
                       })()}
                     </div>
                     <div className="grid gap-2">
-                      <input type="email" aria-label={`Destinatário da NF ${nf}`} value={draft.to} onChange={(event) => updateDraft(record, { to: event.target.value })} placeholder="E-mail do cliente" className="form-input w-full text-xs" />
-                      <p className="text-[11px] text-stone-500">Cópia sempre para {BILLING_EMAIL_ALWAYS_CC}</p>
+                      <input type="email" aria-label={`Destinatário da NF ${nf}`} value={draft.to} onChange={(event) => updateDraft(record, { to: event.target.value })} onBlur={(event) => void rememberClientEmail(record, event.target.value)} placeholder="E-mail do cliente" className="form-input w-full text-xs" />
+                      <p className="text-[11px] text-stone-500">Salvo no cadastro do cliente · Cópia sempre para {BILLING_EMAIL_ALWAYS_CC}</p>
                       <label className="flex items-center gap-2 text-[11px] font-bold text-stone-500">
                         Modelo
                         <select aria-label={`Modelo de e-mail da NF ${nf}`} value={templateFor(record)} onChange={(event) => applyTemplate(record, event.target.value as BillingEmailTemplate)} className="form-input flex-1 text-xs">
