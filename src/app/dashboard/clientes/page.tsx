@@ -16,6 +16,7 @@ export default function ClientsPage() {
   const [sort, setSort] = useState("prioridade");
   const [clientType, setClientType] = useState("Todos");
   const [carteira, setCarteira] = useState("Todas");
+  const [onlyMissingEmail, setOnlyMissingEmail] = useState(false);
   const [showQuarantined, setShowQuarantined] = useState(false);
   const { confirm, toast } = useAppUX();
   const allClients = useDesktopClients();
@@ -37,12 +38,13 @@ export default function ClientsPage() {
             : clientType === "reconquistar"
               ? client.reactivationDecision === "SIM"
               : (client.clientType || "hospital") === clientType)) &&
+        (!onlyMissingEmail || !client.email?.trim()) &&
         (carteira === "Todas" || client.carteira === carteira) &&
         `${client.name} ${client.code} ${client.city} ${client.contact}`
           .toLowerCase()
           .includes(query.toLowerCase()),
       ).sort((a, b) => sort === "nome" ? a.name.localeCompare(b.name) : sort === "potencial" ? b.total12m - a.total12m : a.nextPurchase.localeCompare(b.nextPurchase)),
-    [allClients, carteira, clientType, quarantined, query, showQuarantined, sort, status],
+    [allClients, carteira, clientType, onlyMissingEmail, quarantined, query, showQuarantined, sort, status],
   );
   return (
     <div className="space-y-6">
@@ -82,7 +84,7 @@ export default function ClientsPage() {
           placeholder="Buscar cliente, código, cidade ou contato"
         />
       </div>
-      <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-stone-500">{clients.length} de {allClients.length - quarantined.size} clientes ativos</span><select aria-label="Filtrar por status" className="form-input ml-auto text-xs" value={status} onChange={(e) => setStatus(e.target.value)}><option>Todos</option><option>Comprar agora</option><option>Contato próximo</option><option>Em ciclo</option></select><select aria-label="Filtrar por tipo de cliente" className="form-input text-xs" value={clientType} onChange={(e) => setClientType(e.target.value)}><option value="Todos">Todos os tipos</option>{CLIENT_TYPE_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}<option value="baixados">Clientes baixados na Receita{baixadosCount ? ` (${baixadosCount})` : ""}</option><option value="reconquistar">Marcados para reconquistar{reconquistarCount ? ` (${reconquistarCount})` : ""}</option></select><select aria-label="Filtrar por carteira" className="form-input text-xs" value={carteira} onChange={(e) => setCarteira(e.target.value)}><option value="Todas">Todas as carteiras</option>{CARTEIRA_OPTIONS.map((item) => (<option key={item} value={item}>{item}</option>))}</select><select aria-label="Ordenar clientes" className="form-input text-xs" value={sort} onChange={(e) => setSort(e.target.value)}><option value="prioridade">Prioridade</option><option value="nome">Nome</option><option value="potencial">Maior potencial</option></select></div>
+      <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-stone-500">{clients.length} de {allClients.length - quarantined.size} clientes ativos</span><select aria-label="Filtrar por status" className="form-input ml-auto text-xs" value={status} onChange={(e) => setStatus(e.target.value)}><option>Todos</option><option>Comprar agora</option><option>Contato próximo</option><option>Em ciclo</option></select><select aria-label="Filtrar por tipo de cliente" className="form-input text-xs" value={clientType} onChange={(e) => setClientType(e.target.value)}><option value="Todos">Todos os tipos</option>{CLIENT_TYPE_OPTIONS.map((option) => (<option key={option.value} value={option.value}>{option.label}</option>))}<option value="baixados">Clientes baixados na Receita{baixadosCount ? ` (${baixadosCount})` : ""}</option><option value="reconquistar">Marcados para reconquistar{reconquistarCount ? ` (${reconquistarCount})` : ""}</option></select><select aria-label="Filtrar por carteira" className="form-input text-xs" value={carteira} onChange={(e) => setCarteira(e.target.value)}><option value="Todas">Todas as carteiras</option>{CARTEIRA_OPTIONS.map((item) => (<option key={item} value={item}>{item}</option>))}</select><button type="button" aria-pressed={onlyMissingEmail} onClick={() => setOnlyMissingEmail((current) => !current)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold ${onlyMissingEmail ? "border-amber-300 bg-amber-50 text-amber-800" : "border-stone-200 text-stone-600 hover:bg-stone-50"}`}><MailSearch size={14} />Sem e-mail{missingEmailCount ? ` (${missingEmailCount})` : ""}</button><select aria-label="Ordenar clientes" className="form-input text-xs" value={sort} onChange={(e) => setSort(e.target.value)}><option value="prioridade">Prioridade</option><option value="nome">Nome</option><option value="potencial">Maior potencial</option></select></div>
           <div className="mb-4 flex flex-wrap gap-2">
             <Link href="/dashboard/clientes/novo" className="brand-button inline-flex items-center gap-2 px-3 py-2 text-xs font-bold">
               <FilePlus2 size={14} />
