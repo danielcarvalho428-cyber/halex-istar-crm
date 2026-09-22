@@ -915,7 +915,11 @@ function registerIpc() {
     const logoAttachments = (Array.isArray(config.logoFiles) ? config.logoFiles : [])
       .filter((logo) => logo?.path && fs.existsSync(logo.path))
       .slice(0, 3)
-      .map((logo, index) => ({ filename: logo.fileName, path: logo.path, cid: `signature-logo-${index}@halex` }));
+      .map((logo, index) => ({
+        filename: logo.fileName,
+        content: fs.readFileSync(logo.path),
+        cid: `signature-logo-${index}@halex`,
+      }));
     const signature = [
       config.signatureName && `<strong>${html(config.signatureName)}</strong>`,
       config.signatureRole && html(config.signatureRole),
@@ -931,7 +935,10 @@ function registerIpc() {
         text: `${body}\n\n${[config.signatureName, config.signatureRole, config.phone].filter(Boolean).join("\n")}`,
         html: `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.55;color:#1f2937">${html(body).replace(/\n/g, "<br>")}<br><br>${signature}${logos ? `<div>${logos}</div>` : ""}</div>`,
         attachments: [
-          ...files.map((file) => ({ filename: file.fileName, path: file.filePath })),
+          ...files.map((file) => ({
+            filename: file.fileName,
+            content: fs.readFileSync(file.filePath),
+          })),
           ...logoAttachments,
         ],
       });
