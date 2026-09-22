@@ -239,10 +239,10 @@ export function buildInvoiceEmail(
       "",
       `Segue anexo o DANFE da nota fiscal ${nf}${issuedAt ? `, emitida em ${issuedAt}` : ""}${orderReference}.`,
       "",
-      "Itens faturados:",
+      "Itens faturados nesta nota fiscal:",
       ...itemLines(invoice),
       "",
-      orderNumber ? `O pedido ${orderNumber} foi atendido integralmente.` : "O pedido foi atendido integralmente.",
+      "Permanecemos à disposição para qualquer esclarecimento.",
       ...signature,
     ].join("\n"),
   };

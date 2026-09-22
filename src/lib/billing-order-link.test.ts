@@ -80,7 +80,9 @@ test("reports 100% billing and lists every item in the email", () => {
   assert.match(email.subject, /^Halex Istar · Nota fiscal 12345 · Pedido 655693461$/);
   assert.match(email.body, /004124 — Produto A: 100 un/);
   assert.match(email.body, /40000135 — Produto B: 50 un/);
-  assert.match(email.body, /O pedido 655693461 foi atendido integralmente\./);
+  // Nunca afirmamos que o pedido foi atendido integralmente: só listamos o que saiu na NF.
+  assert.doesNotMatch(email.body, /integralmente/i);
+  assert.match(email.body, /Permanecemos à disposição para qualquer esclarecimento\./);
   // The client is never told about our internal conferência.
   assert.doesNotMatch(email.body, /base|conferência/i);
 });
